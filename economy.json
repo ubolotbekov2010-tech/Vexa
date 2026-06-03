@@ -1,0 +1,228 @@
+{
+    "1488295467619061922": {
+        "1212473345417674822": {
+            "balance": 23269627520,
+            "last_daily": 1779865711,
+            "last_weekly": 1779866162,
+            "last_work": 1779869894,
+            "last_training": 0,
+            "businesses": [
+                {
+                    "name": "djfidf",
+                    "level": 3,
+                    "last_collect": "2026-05-28T21:33:05.425353"
+                },
+                {
+                    "name": "djjdjd",
+                    "level": 3,
+                    "created_at": "2026-05-27T14:33:12.505427",
+                    "last_collect": "2026-05-28T21:33:12.505427"
+                },
+                {
+                    "name": "hdjd",
+                    "level": 3,
+                    "last_collect": "2026-05-28T21:33:05.425353"
+                }
+            ],
+            "bank": 0
+        },
+        "912623444410130473": {
+            "balance": 648514,
+            "last_daily": 1780430528,
+            "last_weekly": 1780506404,
+            "last_work": 1780506411,
+            "last_training": 0,
+            "streak": 3,
+            "bank": 1045000000,
+            "businesses": [
+                {
+                    "name": "zopapa",
+                    "level": 3,
+                    "last_collect": 1779991976.6996956
+                },
+                {
+                    "name": "dadada",
+                    "level": 2,
+                    "last_collect": 1779991988.832671
+                },
+                {
+                    "name": "lalala",
+                    "level": 1,
+                    "last_collect": 1779992000.8508444
+                }
+            ]
+        },
+        "1222468918061305927": {
+            "balance": 105551752,
+            "last_daily": 1779960242,
+            "last_weekly": 1779869386,
+            "last_work": 1780043748,
+            "last_training": 0,
+            "streak": 2,
+            "businesses": [
+                {
+                    "name": "goida",
+                    "level": 3,
+                    "last_collect": 1780004165.738691
+                },
+                {
+                    "name": "goida3",
+                    "level": 3,
+                    "last_collect": 1780004201.8001268
+                },
+                {
+                    "name": "goida 2",
+                    "level": 3,
+                    "last_collect": 1780004312.0707493
+                }
+            ],
+            "bank": 60000000
+        },
+        "1490928671731748965": {
+            "balance": 194225,
+            "businesses": [
+                {
+                    "name": "miro",
+                    "level": 3,
+                    "last_collect": 1779977355.3580475
+                },
+                {
+                    "name": "Mirokoro",
+                    "level": 3,
+                    "last_collect": 1779977371.352568
+                },
+                {
+                    "name": "millioner",
+                    "level": 3,
+                    "last_collect": 1779977381.241323
+                }
+            ],
+            "last_daily": 1780243717,
+            "streak": 1,
+            "last_weekly": 1779891039,
+            "last_work": 1779971649,
+            "bank": 0
+        },
+        "1021424472034639993": {
+            "balance": 639786,
+            "last_daily": 1779977311,
+            "last_weekly": 1779978978,
+            "last_work": 0,
+            "last_training": 0,
+            "streak": 1,
+            "bank": 0
+        },
+        "1412070375604355155": {
+            "balance": 924529576,
+            "last_daily": 1780336119,
+            "last_weekly": 1780507064,
+            "last_work": 1780252177,
+            "last_training": 0,
+            "streak": 2,
+            "businesses": [
+                {
+                    "name": "prodayu ludey",
+                    "level": 3,
+                    "last_collect": 1780242194.9667811
+                },
+                {
+                    "name": "prodam teba",
+                    "level": 3,
+                    "last_collect": 1780242511.1349895
+                }
+            ]
+        },
+        "1491828164845109439": {
+            "balance": 5000000,
+            "businesses": []
+        },
+        "611931560848916496": {
+            "balance": 55,
+            "last_daily": 0,
+            "last_weekly": 0,
+            "last_work": 1780065484,
+            "last_training": 0,
+            "streak": 0
+        },
+        "1281493202804674592": {
+            "balance": 3000000000,
+            "last_daily": 0,
+            "last_weekly": 0,
+            "last_work": 0,
+            "last_training": 0,
+            "streak": 0
+        },
+        "1289215800036823233": {
+            "balance": 8330098,
+            "last_daily": 1779991312,
+            "last_weekly": 1779991321,
+            "last_work": 1779991327,
+            "last_training": 0,
+            "streak": 1,
+            "businesses": [
+                {
+                    "name": "bubs milk",
+                    "level": 3,
+                    "last_collect": 1780001516.645187
+                },
+                {
+                    "name": "suksmydig",
+                    "level": 3,
+                    "last_collect": 1780001538.5765524
+                },
+                {
+                    "name": "homelander milk",
+                    "level": 3,
+                    "last_collect": 1780001553.4613822
+                }
+            ]
+        },
+        "750701615060746311": {
+            "balance": 30000,
+            "last_daily": 1780001730,
+            "last_weekly": 1780001740,
+            "last_work": 0,
+            "last_training": 0,
+            "streak": 1
+        },
+        "1288123934981623811": {
+            "balance": 0,
+            "last_daily": 1780340232,
+            "last_weekly": 1780059835,
+            "last_work": 0,
+            "last_training": 0,
+            "streak": 1
+        },
+        "1491503910630723737": {
+            "balance": 824,
+            "businesses": [],
+            "bank": 0,
+            "last_work": 1780252261
+        },
+        "853317504682950699": {
+            "balance": 0,
+            "last_daily": 1780243810,
+            "last_weekly": 0,
+            "last_work": 1780252189,
+            "last_training": 0,
+            "streak": 1,
+            "bank": 0
+        },
+        "870255860423737345": {
+            "balance": 0,
+            "last_daily": 0,
+            "last_weekly": 0,
+            "last_work": 0,
+            "last_training": 0,
+            "streak": 0
+        },
+        "1460714970672136424": {
+            "balance": 513937,
+            "last_daily": 1780513265,
+            "last_weekly": 0,
+            "last_work": 0,
+            "last_training": 0,
+            "streak": 1
+        }
+    }
+}
