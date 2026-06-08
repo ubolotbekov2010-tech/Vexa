@@ -1537,15 +1537,12 @@ class HelpView(discord.ui.View):
 
 @client.event
 async def on_ready():
+    client.add_view(FactionView())
     print(f"Bot {client.user} is ready!")
-
+    
     if not payout_loop.is_running():
         payout_loop.start()
-
-    try:
-        synced = await client.tree.sync()
-        print(f"Синхронизировано команд (глобально): {len(synced)}")
-    except Exception as e:
-        print(f"Ошибка синхронизации: {e}")
+        
+    print("Бот готов к работе с текстовыми командами!")
 
 client.run(os.getenv('BOT_TOKEN'))
