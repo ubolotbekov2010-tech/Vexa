@@ -1141,32 +1141,44 @@ async def event(ctx):
         await ctx.send(embed=embed, view=FactionView())
 
 @client.command()
-async def leaderboard(ctx):
-    await ctx.guild.chunk()
-    kira_list = []
-    det_list = []
-    
-    for uid, data in user_data.items():
-        score = data.get('messages', 0) + data.get('commands', 0) + data.get('voice', 0)
-        member = ctx.guild.get_member(int(uid))
-        name = member.display_name if member else f"ID {uid}"
+async def event(ctx, sub_command=None):
+    if sub_command == "leaderboard":
+        await ctx.guild.chunk()
+        kira_list = []
+        det_list = []
         
-        if data.get('side') == 'kira':
-            kira_list.append((name, score))
-        else:
-            det_list.append((name, score))
+        for uid, data in user_data.items():
+            score = data.get('messages', 0) + data.get('commands', 0) + data.get('voice', 0)
+            member = ctx.guild.get_member(int(uid))
+            name = member.display_name if member else f"ID {uid}"
             
-    kira_list.sort(key=lambda x: x[1], reverse=True)
-    det_list.sort(key=lambda x: x[1], reverse=True)
-    
-    k_text = "\n".join([f"{i+1}. {n} — {s}" for i, (n, s) in enumerate(kira_list[:5])]) or "Пусто."
-    d_text = "\n".join([f"{i+1}. {n} — {s}" for i, (n, s) in enumerate(det_list[:5])]) or "Пусто."
-    
-    embed = discord.Embed(title="🏆 ТАБЛИЦА ЛИДЕРОВ", color=0xffff00)
-    embed.add_field(name="🍎 Фракция Киры", value=k_text, inline=True)
-    embed.add_field(name="🕵️ Фракция Детективов", value=d_text, inline=True)
-    
-    await ctx.send(embed=embed)
+            if data.get('side') == 'kira':
+                kira_list.append((name, score))
+            else:
+                det_list.append((name, score))
+                
+        kira_list.sort(key=lambda x: x[1], reverse=True)
+        det_list.sort(key=lambda x: x[1], reverse=True)
+        
+        k_text = "\n".join([f"{i+1}. {n} — {s}" for i, (n, s) in enumerate(kira_list[:5])]) or "Пусто."
+        d_text = "\n".join([f"{i+1}. {n} — {s}" for i, (n, s) in enumerate(det_list[:5])]) or "Пусто."
+        
+        embed = discord.Embed(title="🏆 ТАБЛИЦА ЛИДЕРОВ", color=0xffff00)
+        embed.add_field(name="🍎 Фракция Киры", value=k_text, inline=True)
+        embed.add_field(name="🕵️ Фракция Детективов", value=d_text, inline=True)
+        
+        await ctx.send(embed=embed)
+        
+    else:
+        user_id = str(ctx.author.id)
+        if user_id in user_data:
+            data = user_data[user_id]
+            side_name = "Кира" if data['side'] == 'kira' else "Детективы"
+            embed = discord.Embed(title=f"🍎 Фракция: {side_name.upper()}", color=discord.Color.blue())
+            embed.add_field(name="📝 Оперативные задачи", value=f"Голод/Расследование: {data.get('voice', 0)}/20\nМутация/Анализ: {data.get('commands', 0)}/50\nТрагедия/Правосудие: {data.get('messages', 0)}/150", inline=False)
+            await ctx.send(embed=embed)
+        else:
+            await ctx.send("Вы еще не участвуете в ивенте.")
 
 @client.event
 async def on_ready():
