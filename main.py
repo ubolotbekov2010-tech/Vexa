@@ -1122,63 +1122,37 @@ async def event(ctx):
         bar_c = f"[{'▬' * (c // 10)}{'—' * (5 - (c // 10))}]"
         bar_m = f"[{'▬' * (m // 30)}{'—' * (5 - (m // 30))}]"
 
-        if data['side'] == 'kira':
-            tasks = ("Охота (Войс)", "Использование Тетради (Команды)", "Распространение слухов (Сообщения)")
-        else:
-            tasks = ("Допросы (Войс)", "Сбор улик (Команды)", "Поиск следов Киры (Сообщения)")
+        tasks = ("Охота", "Тетрадь", "Слухи") if data['side'] == 'kira' else ("Допросы", "Улики", "Поиск")
 
         embed = discord.Embed(title=f"🍎 Фракция: {data['side'].upper()}", color=0xff0000 if data['side'] == 'kira' else 0x0000ff)
-        embed.description = (
-            f"📋 Оперативные задачи\n\n"
-            f"⏳ Голод/Расследование\n🎙️ {tasks[0]}\n{bar_v} {v}/20 мин\n\n"
-            f"⏳ Мутация/Анализ\n🔮 {tasks[1]}\n{bar_c} {c}/50\n\n"
-            f"⏳ Трагедия/Правосудие\n🩸 {tasks[2]}\n{bar_m} {m}/150"
-        )
+        embed.description = f"🎙️ {tasks[0]}: {bar_v} {v}/20\n🔮 {tasks[1]}: {bar_c} {c}/50\n🩸 {tasks[2]}: {bar_m} {m}/150"
         await ctx.send(embed=embed)
     else:
         embed = discord.Embed(title="📓 DEATH NOTE: ВОЙНА ФРАКЦИЙ", color=0xffff00)
         embed.description = "ВЫБЕРИ СВОЮ СТОРОНУ. ПУТИ НАЗАД НЕ БУДЕТ."
         await ctx.send(embed=embed, view=FactionView())
 
-@client.command()
-async def event(ctx, sub_command=None):
-    if sub_command == "leaderboard":
-        await ctx.guild.chunk()
-        kira_list = []
-        det_list = []
-        
-        for uid, data in user_data.items():
-            score = data.get('messages', 0) + data.get('commands', 0) + data.get('voice', 0)
-            member = ctx.guild.get_member(int(uid))
-            name = member.display_name if member else f"ID {uid}"
-            
-            if data.get('side') == 'kira':
-                kira_list.append((name, score))
-            else:
-                det_list.append((name, score))
-                
-        kira_list.sort(key=lambda x: x[1], reverse=True)
-        det_list.sort(key=lambda x: x[1], reverse=True)
-        
-        k_text = "\n".join([f"{i+1}. {n} — {s}" for i, (n, s) in enumerate(kira_list[:5])]) or "Пусто."
-        d_text = "\n".join([f"{i+1}. {n} — {s}" for i, (n, s) in enumerate(det_list[:5])]) or "Пусто."
-        
-        embed = discord.Embed(title="🏆 ТАБЛИЦА ЛИДЕРОВ", color=0xffff00)
-        embed.add_field(name="🍎 Фракция Киры", value=k_text, inline=True)
-        embed.add_field(name="🕵️ Фракция Детективов", value=d_text, inline=True)
-        
-        await ctx.send(embed=embed)
-        
-    else:
-        user_id = str(ctx.author.id)
-        if user_id in user_data:
-            data = user_data[user_id]
-            side_name = "Кира" if data['side'] == 'kira' else "Детективы"
-            embed = discord.Embed(title=f"🍎 Фракция: {side_name.upper()}", color=discord.Color.blue())
-            embed.add_field(name="📝 Оперативные задачи", value=f"Голод/Расследование: {data.get('voice', 0)}/20\nМутация/Анализ: {data.get('commands', 0)}/50\nТрагедия/Правосудие: {data.get('messages', 0)}/150", inline=False)
-            await ctx.send(embed=embed)
+@event.command(name="leaderboard")
+async def event_leaderboard(ctx):
+    await ctx.guild.chunk()
+    kira_list = []
+    det_list = []
+    for uid, data in user_data.items():
+        score = data.get('messages', 0) + data.get('commands', 0) + data.get('voice', 0)
+        member = ctx.guild.get_member(int(uid))
+        name = member.display_name if member else f"ID {uid}"
+        if data.get('side') == 'kira':
+            kira_list.append((name, score))
         else:
-            await ctx.send("Вы еще не участвуете в ивенте.")
+            det_list.append((name, score))
+    kira_list.sort(key=lambda x: x[1], reverse=True)
+    det_list.sort(key=lambda x: x[1], reverse=True)
+    k_text = "\n".join([f"{i+1}. {n} — {s}" for i, (n, s) in enumerate(kira_list[:5])]) or "Пусто."
+    d_text = "\n".join([f"{i+1}. {n} — {s}" for i, (n, s) in enumerate(det_list[:5])]) or "Пусто."
+    embed = discord.Embed(title="🏆 ТАБЛИЦА ЛИДЕРОВ", color=0xffff00)
+    embed.add_field(name="🍎 Кира", value=k_text, inline=True)
+    embed.add_field(name="🕵️ Детективы", value=d_text, inline=True)
+    await ctx.send(embed=embed)
 
 @client.event
 async def on_ready():
