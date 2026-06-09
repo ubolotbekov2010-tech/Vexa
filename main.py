@@ -47,6 +47,7 @@ class Client(commands.Bot):
 
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True
 client = commands.Bot(command_prefix="!", intents=intents)
 
 from discord.ext import tasks
@@ -1057,12 +1058,12 @@ class FactionView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="Кира", style=discord.ButtonStyle.danger, emoji="🍎")
+    @discord.ui.button(label="Кира", style=discord.ButtonStyle.danger, emoji="🍎", custom_id="faction_kira_button")
     async def kira(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_data[str(interaction.user.id)] = {"side": "kira", "messages": 0, "commands": 0, "voice": 0}
         await interaction.response.send_message("Ты примкнул к Кире!", ephemeral=True)
 
-    @discord.ui.button(label="Детектив", style=discord.ButtonStyle.primary, emoji="🕵️")
+    @discord.ui.button(label="Детектив", style=discord.ButtonStyle.primary, emoji="🕵️", custom_id="faction_detective_button")
     async def detective(self, interaction: discord.Interaction, button: discord.ui.Button):
         user_data[str(interaction.user.id)] = {"side": "detective", "messages": 0, "commands": 0, "voice": 0}
         await interaction.response.send_message("Ты стал на сторону Детективов!", ephemeral=True)
@@ -1139,8 +1140,9 @@ async def event(ctx):
         embed.description = "ВЫБЕРИ СВОЮ СТОРОНУ. ПУТИ НАЗАД НЕ БУДЕТ."
         await ctx.send(embed=embed, view=FactionView())
 
-@event.command()
+@client.command()
 async def leaderboard(ctx):
+    await ctx.guild.chunk()
     kira_list = []
     det_list = []
     
@@ -1149,7 +1151,7 @@ async def leaderboard(ctx):
         member = ctx.guild.get_member(int(uid))
         name = member.display_name if member else f"ID {uid}"
         
-        if data['side'] == 'kira':
+        if data.get('side') == 'kira':
             kira_list.append((name, score))
         else:
             det_list.append((name, score))
