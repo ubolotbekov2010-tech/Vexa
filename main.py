@@ -1574,7 +1574,7 @@ async def on_member_update(before, after):
                         await send_log("🔓 Пользователь размучен", discord.Color.green(), {"Участник": after.mention, "Модератор": moderator.mention, "Роль": role.name})
             break
 
-@client.command(name="clear")
+@client.command(name="purge")
 @commands.has_any_role("Персонал", "Старший персонал")
 async def clear(ctx, amount: int):
     if amount < 1:
