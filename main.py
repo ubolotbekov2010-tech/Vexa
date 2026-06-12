@@ -1789,6 +1789,34 @@ async def common_open(ctx):
     else:
         await ctx.send("❌ У вас нет Common case!")
 
+last_free_claim = {}
+
+@client.command(name="free")
+async def free_case(ctx):
+    user_id = ctx.author.id
+    now = datetime.datetime.now()
+    
+    if user_id in last_free_claim:
+        last_claim = last_free_claim[user_id]
+        if (now - last_claim).days < 7:
+            days_left = 7 - (now - last_claim).days
+            await ctx.send(f"❌ Вы уже забирали бесплатные кейсы! Можно будет забрать через {days_left} дней.")
+            return
+
+    data = get_user(user_id)
+    
+    data["cases"]["common"] = data["cases"].get("common", 0) + 3
+    data["cases"]["1_summer"] = data["cases"].get("1_summer", 0) + 3
+    
+    last_free_claim[user_id] = now
+    
+    await ctx.send("🎁 Вы успешно получили 3 Common кейса и 3 Летних кейса! Следующий раз можно забрать через 7 дней.")
+
+def get_user(uid):
+    if uid not in user_data:
+        user_data[uid] = {"money": 0, "cases": {"1_summer": 0, "2_summer": 0, "3_summer": 0, "common": 0}, "has_role": False}
+    return user_data[uid]
+
 @client.event
 async def on_ready():
     client.add_view(FactionView())
