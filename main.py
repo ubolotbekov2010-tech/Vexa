@@ -10,6 +10,9 @@ import random
 import time
 from dotenv import load_dotenv
 
+LOG_CHANNEL_ID = 1514982915921150083
+MUTE_ROLE_ID = 1514982507014131828
+
 load_dotenv()
 
 
@@ -70,23 +73,14 @@ async def sayhello(interaction: discord.Interaction):
 async def printer(interaction: discord.Interaction, printer: str):
     await interaction.response.send_message(printer)
     
-@client.tree.command(name="mute", description="Выдать мут пользователю")
-@app_commands.default_permissions(moderate_members=True)
-@app_commands.checks.has_permissions(moderate_members=True)
-@app_commands.choices(unit=[
-    app_commands.Choice(name="Секунды (с)", value="s"),
-    app_commands.Choice(name="Минуты (м)", value="m"),
-    app_commands.Choice(name="Часы (ч)", value="h"),
-    app_commands.Choice(name="Дни (д)", value="d")
-])
-async def mute(interaction: discord.Interaction, member: discord.Member, time: int, unit: str, reason: str):
+@client.command(name="mute")
+@commands.has_permissions(moderate_members=True)
+async def mute(ctx, member: discord.Member, time: int, unit: str, *, reason: str = "Без причины"):
     try:
-        
-        if interaction.user.top_role <= member.top_role and interaction.guild.owner_id != interaction.user.id:
-            await interaction.response.send_message("❌ Вы не можете замутить участника с ролью выше или равной вашей!", ephemeral=True)
+        if ctx.author.top_role <= member.top_role and ctx.guild.owner_id != ctx.author.id:
+            await ctx.send("❌ У участника роль выше или равна вашей!")
             return
 
-        
         seconds = 0
         unit_text = ""
         if unit == "s":
@@ -102,62 +96,54 @@ async def mute(interaction: discord.Interaction, member: discord.Member, time: i
             seconds = time * 86400
             unit_text = "дн."
 
-        import datetime
         duration = datetime.timedelta(seconds=seconds)
-        
-         
         await member.timeout(duration, reason=reason)
 
-         
         emb = discord.Embed(title=f"⏳ Участнику выдан мут на {time} {unit_text}", color=discord.Color.orange())
-        emb.add_field(name="Модератор", value=interaction.user.mention)
+        emb.add_field(name="Модератор", value=ctx.author.mention)
         emb.add_field(name="Нарушитель", value=member.mention)
         emb.add_field(name="Причина", value=reason, inline=False)
-        
-        await interaction.response.send_message(embed=emb)
-
+        emb.timestamp = datetime.datetime.utcnow()
+        await ctx.send(embed=emb)
     except Exception as e:
-        await interaction.response.send_message(f"❌ Ошибка при выдаче мута: {e}", ephemeral=True)
+        await ctx.send(f"❌ Ошибка при выдаче мута: {e}")
   
-@client.tree.command(name="ban", description="Забанить пользователя")
-@app_commands.default_permissions(ban_members=True)
-@app_commands.checks.has_permissions(ban_members=True)
-@app_commands.choices(unit=[
-    app_commands.Choice(name="Минуты", value="m"),
-    app_commands.Choice(name="Часы", value="h"),
-    app_commands.Choice(name="Дни", value="d")
-])
-async def ban(it: discord.Interaction, m: discord.Member, time: int = None, unit: str = None, r: str = "Не указана"):
+@client.command(name="ban")
+@commands.has_permissions(ban_members=True)
+async def ban(ctx, member: discord.Member, time: int = None, unit: str = None, *, reason: str = "Не указана"):
     try:
-        if it.user.top_role <= m.top_role and it.guild.owner_id != it.user.id:
-            await it.response.send_message("❌ У игрока роль выше или равна вашей!", ephemeral=True)
+        if ctx.author.top_role <= member.top_role and ctx.guild.owner_id != ctx.author.id:
+            await ctx.send("❌ У игрока роль выше или равна вашей!")
             return
-        u = await client.fetch_user(m.id)
+            
         sec, txt = 0, ""
         if time and unit:
             if unit == "m": sec, txt = time * 60, "мин."
             elif unit == "h": sec, txt = time * 3600, "час."
             elif unit == "d": sec, txt = time * 86400, "дн."
-            await m.ban(reason=f"Бан на {time} {txt}. Причина: {r}")
+            await member.ban(reason=f"Бан на {time} {txt}. Причина: {reason}")
             tit = f"⏳ Выдан временный бан на {time} {txt}"
         else:
-            await m.ban(reason=f"Бан навсегда. Причина: {r}")
+            await member.ban(reason=f"Бан навсегда. Причина: {reason}")
             tit = "🔨 Участник забанен навсегда"
+            
         emb = discord.Embed(title=tit, color=discord.Color.red())
-        emb.add_field(name="Модератор", value=it.user.mention)
-        emb.add_field(name="Нарушитель", value=u.mention)
-        emb.add_field(name="Причина", value=r, inline=False)
+        emb.add_field(name="Модератор", value=ctx.author.mention)
+        emb.add_field(name="Нарушитель", value=member.mention)
+        emb.add_field(name="Причина", value=reason, inline=False)
         emb.timestamp = datetime.datetime.now()
-        await it.response.send_message(embed=emb)
+        await ctx.send(embed=emb)
+        
         if sec > 0:
             await asyncio.sleep(sec)
             try:
-                await it.guild.unban(u, reason="Время бана истекло")
-                un = discord.Embed(title="🕊️ Время бана истекло", description=f"{u.mention} разбанен.", color=discord.Color.green())
-                await it.channel.send(embed=un)
-            except discord.NotFound: pass
+                await ctx.guild.unban(member, reason="Время бана истекло")
+                un = discord.Embed(title="🕊️ Время бана истекло", description=f"{member.mention} разбанен.", color=discord.Color.green())
+                await ctx.send(embed=un)
+            except discord.NotFound:
+                pass
     except Exception as e:
-        await it.response.send_message(f"❌ Ошибка: {e}", ephemeral=True)
+        await ctx.send(f"❌ Ошибка: {e}")
         
 @client.tree.command(name="kick", description="Кикнуть пользователя с сервера")
 @app_commands.default_permissions(kick_members=True)
@@ -179,73 +165,69 @@ async def kick(interaction: discord.Interaction, member: discord.Member, reason:
     except Exception as e:
         await interaction.response.send_message(f"❌ Ошибка при кике: {e}", ephemeral=True)
 
-@client.tree.command(name="clear", description="Очистить чат")
-@app_commands.checks.has_any_role("Project Leaders", "Staff Manager", "Curator", "Main Administrator", "Administrator", "Moderator")
-async def clear(interaction: discord.Interaction, amount: int):
+@client.command(name="clear")
+@commands.has_any_role("Project Leaders", "Staff Manager", "Curator", "Main Administrator", "Administrator", "Moderator")
+async def clear(ctx, amount: int):
     if amount < 1:
-        await interaction.response.send_message("Укажите число больше 0", ephemeral=True)
+        await ctx.send("Укажите число больше 0")
         return
 
-    await interaction.response.defer(ephemeral=True)
+    deleted = await ctx.channel.purge(limit=amount + 1)
     
-    deleted = await interaction.channel.purge(limit=amount)
-    
-    await interaction.followup.send(f"Успешно удалено {len(deleted)} сообщений", ephemeral=True)
+    await ctx.send(f"Успешно удалено {len(deleted) - 1} сообщений", delete_after=5)
 
 @clear.error
-async def clear_error(interaction: discord.Interaction, error):
-    if isinstance(error, app_commands.MissingAnyRole):
-        await interaction.response.send_message("У вас нет прав для использования этой команды", ephemeral=True)
-    elif isinstance(error, app_commands.CommandInvokeError):
-        await interaction.response.send_message("У меня нет прав на управление сообщениями. Проверьте настройки канала/бота", ephemeral=True)
+async def clear_error(ctx, error):
+    if isinstance(error, commands.MissingAnyRole):
+        await ctx.send("У вас нет прав для использования этой команды")
+    elif isinstance(error, commands.CommandInvokeError):
+        await ctx.send("У меня нет прав на управление сообщениями. Проверьте настройки канала/бота")
 
-@client.tree.command(name="unban", description="Разбанить пользователя по ID")
-@app_commands.default_permissions(ban_members=True)
-@app_commands.checks.has_permissions(ban_members=True)
-async def unban(interaction: discord.Interaction, user: discord.User, reason: str):
+@client.command(name="unban")
+@commands.has_permissions(ban_members=True)
+async def unban(ctx, user_id: int, *, reason: str = "Без причины"):
     try:
-        await interaction.guild.unban(user, reason=reason)
+        user = await client.fetch_user(user_id)
+        await ctx.guild.unban(user, reason=reason)
 
         emb = discord.Embed(title="🤝 Пользователь успешно разбанен", color=discord.Color.green())
-        emb.add_field(name="Модератор", value=interaction.user.mention)
+        emb.add_field(name="Модератор", value=ctx.author.mention)
         emb.add_field(name="Пользователь", value=user.mention)
         emb.add_field(name="Причина разбана", value=reason, inline=False)
         
-        await interaction.response.send_message(embed=emb)
+        await ctx.send(embed=emb)
     except discord.NotFound:
-        await interaction.response.send_message("❌ Этот пользователь не найден в списке банов сервера!", ephemeral=True)
+        await ctx.send("❌ Этот пользователь не найден в списке банов сервера!")
     except Exception as e:
-        await interaction.response.send_message(f"❌ Ошибка при разбане: {e}", ephemeral=True)
+        await ctx.send(f"❌ Ошибка при разбане: {e}")
 
-@client.tree.command(name="unmute", description="Снять мут (тайм-аут) с пользователя")
-@app_commands.default_permissions(moderate_members=True)
-@app_commands.checks.has_permissions(moderate_members=True)
-async def unmute(interaction: discord.Interaction, member: discord.Member, reason: str):
+@client.command(name="unmute")
+@commands.has_permissions(moderate_members=True)
+async def unmute(ctx, member: discord.Member, *, reason: str = "Без причины"):
     try:
         await member.timeout(None, reason=reason)
 
         emb = discord.Embed(title="🔊 С участника снят мут", color=discord.Color.green())
-        emb.add_field(name="Модератор", value=interaction.user.mention)
+        emb.add_field(name="Модератор", value=ctx.author.mention)
         emb.add_field(name="Участник", value=member.mention)
         emb.add_field(name="Причина снятия", value=reason, inline=False)
         
-        await interaction.response.send_message(embed=emb)
+        await ctx.send(embed=emb)
     except Exception as e:
-        await interaction.response.send_message(f"❌ Ошибка при размуте: {e}", ephemeral=True)
+        await ctx.send(f"❌ Ошибка при размуте: {e}")
 
-@client.tree.command(name="warn", description="Выдать предупреждение пользователю")
-async def warn(interaction: discord.Interaction, member: discord.Member, reason: str):
-    allowed = ["Owner", "Co-Owner", "Curator"]
-    if not any(r.name in allowed for r in interaction.user.roles):
-        await interaction.response.send_message("❌ Эту команду может использовать только высшая администрация!", ephemeral=True)
-        return
-
+@client.command(name="warn")
+@commands.has_any_role("Scarlet owner", "Co-Owner", "Curator", "Staff Manager")
+async def warn(ctx, member: discord.Member, *, reason: str = "Без причины"):
+    import json
+    import os
+    
     warns_data = {}
     if os.path.exists("warns.json"):
         with open("warns.json", "r") as f:
             warns_data = json.load(f)
 
-    guild_id = str(interaction.guild.id)
+    guild_id = str(ctx.guild.id)
     user_id = str(member.id)
 
     if guild_id not in warns_data:
@@ -264,56 +246,55 @@ async def warn(interaction: discord.Interaction, member: discord.Member, reason:
 
         staff_names = ["Main Administrator", "Administrator", "Moderator", "Main Support", "Advanced Support", "Support"]
         roles_to_remove = [r for r in member.roles if r.name in staff_names]
-
+        
         if roles_to_remove:
             try:
                 await member.remove_roles(*roles_to_remove)
                 emb = discord.Embed(title="📉 Снятие с должности", color=discord.Color.orange())
-                emb.add_field(name="Администратор", value=interaction.user.mention)
+                emb.add_field(name="Администратор", value=ctx.author.mention)
                 emb.add_field(name="Нарушитель", value=member.mention)
                 emb.add_field(name="Решение", value="Снят со всех должностей за 3/3 варна")
                 emb.add_field(name="Последняя причина", value=reason, inline=False)
-                await interaction.response.send_message(embed=emb)
+                await ctx.send(embed=emb)
             except Exception as e:
-                await interaction.response.send_message(f"❌ Не удалось снять роли: {e}", ephemeral=True)
+                await ctx.send(f"❌ Не удалось снять роли: {e}")
         else:
             try:
-                await interaction.guild.ban(member, reason="3/3 предупреждений")
+                await ctx.guild.ban(member, reason="3/3 предупреждений")
                 emb = discord.Embed(title="🔨 Автоматический бан", color=discord.Color.red())
-                emb.add_field(name="Администратор", value=interaction.user.mention)
+                emb.add_field(name="Администратор", value=ctx.author.mention)
                 emb.add_field(name="Нарушитель", value=member.mention)
                 emb.add_field(name="Причина", value="Получение 3/3 предупреждений")
                 emb.add_field(name="Последняя причина", value=reason, inline=False)
-                await interaction.response.send_message(embed=emb)
+                await ctx.send(embed=emb)
             except Exception as e:
-                await interaction.response.send_message(f"❌ Не удалось забанить пользователя: {e}", ephemeral=True)
+                await ctx.send(f"❌ Не удалось забанить пользователя: {e}")
     else:
         emb = discord.Embed(title="⚠️ Выдано предупреждение", color=discord.Color.yellow())
-        emb.add_field(name="Администратор", value=interaction.user.mention)
+        emb.add_field(name="Администратор", value=ctx.author.mention)
         emb.add_field(name="Нарушитель", value=member.mention)
         emb.add_field(name="Причина", value=reason)
         emb.add_field(name="Предупреждения", value=f"`{current_warns}/3`", inline=False)
-        await interaction.response.send_message(embed=emb)
+        await ctx.send(embed=emb)
 
-@client.tree.command(name="unwarn", description="Снять одно предупреждение с пользователя")
-async def unwarn(interaction: discord.Interaction, member: discord.Member, reason: str):
-    allowed = ["Owner", "Co-Owner", "Curator"]
-    if not any(r.name in allowed for r in interaction.user.roles):
-        await interaction.response.send_message("❌ Эту команду может использовать только высшая администрация!", ephemeral=True)
-        return
-
+@client.command(name="unwarn")
+@commands.has_any_role("Scarlet owner", "Co-Owner", "Curator", "Staff Manager")
+async def unwarn(ctx, member: discord.Member, *, reason: str = "Без причины"):
+    import json
+    import os
+    
     warns_data = {}
     if os.path.exists("warns.json"):
         with open("warns.json", "r") as f:
             warns_data = json.load(f)
 
-    guild_id = str(interaction.guild.id)
+    guild_id = str(ctx.guild.id)
     user_id = str(member.id)
 
     current_warns = warns_data.get(guild_id, {}).get(user_id, 0)
 
     if current_warns == 0:
-        await interaction.response.send_message(f"❌ У пользователя {member.mention} нет активных предупреждений!", ephemeral=True)
+        await ctx.send(f"❌ У пользователя {member.mention} нет активных предупреждений!")
         return
 
     new_warns = current_warns - 1
@@ -323,22 +304,29 @@ async def unwarn(interaction: discord.Interaction, member: discord.Member, reaso
         json.dump(warns_data, f, indent=4)
 
     emb = discord.Embed(title="✅ Снято предупреждение", color=discord.Color.green())
-    emb.add_field(name="Администратор", value=interaction.user.mention)
+    emb.add_field(name="Администратор", value=ctx.author.mention)
     emb.add_field(name="Нарушитель", value=member.mention)
     emb.add_field(name="Причина снятия", value=reason)
     emb.add_field(name="Предупреждения", value=f"`{new_warns}/3`", inline=False)
-    await interaction.response.send_message(embed=emb)
+    await ctx.send(embed=emb)
     
-@client.tree.command(name="warn_list", description="Показать список всех варнов")
-@app_commands.checks.has_permissions(administrator=True)
-async def warn_list(interaction: discord.Interaction):
-    gid = str(interaction.guild_id)
+@client.command(name="warn_list")
+@commands.has_any_role("Scarlet owner", "Co-Owner", "Curator", "Staff Manager")
+async def warn_list(ctx):
+    import json
+    import os
     
+    gid = str(ctx.guild.id)
+    
+    if not os.path.exists("warns.json"):
+        await ctx.send("Варнов пока нет.")
+        return
+
     with open("warns.json", "r") as f:
         data = json.load(f)
     
     if gid not in data or not data[gid]:
-        await interaction.response.send_message("Варнов пока нет.", ephemeral=True)
+        await ctx.send("Варнов пока нет.")
         return
 
     embed = discord.Embed(title="Список предупреждений", color=discord.Color.red())
@@ -346,20 +334,20 @@ async def warn_list(interaction: discord.Interaction):
     found = False
     for uid, count in data[gid].items():
         if count > 0:
-            member = interaction.guild.get_member(int(uid))
+            member = ctx.guild.get_member(int(uid))
             name = member.display_name if member else f"Пользователь {uid}"
             embed.add_field(name=name, value=f"Предупреждений: {count}", inline=False)
             found = True
     
     if not found:
-        await interaction.response.send_message("Варнов пока нет.", ephemeral=True)
+        await ctx.send("Варнов пока нет.")
     else:
-        await interaction.response.send_message(embed=embed)
+        await ctx.send(embed=embed)
 
 @warn_list.error
-async def warn_list_error(interaction: discord.Interaction, error):
-    if isinstance(error, app_commands.MissingPermissions):
-        await interaction.response.send_message("У вас нет прав администратора для использования этой команды!", ephemeral=True)
+async def warn_list_error(ctx, error):
+    if isinstance(error, commands.MissingAnyRole):
+        await ctx.send("У вас нет прав для использования этой команды!")
 
 @client.tree.command(name="balance", description="Ваш баланс")
 async def balance(interaction: discord.Interaction):
@@ -1522,6 +1510,116 @@ class HelpView(discord.ui.View):
     def __init__(self):
         super().__init__()
         self.add_item(HelpSelect())
+
+async def send_log(title, color, fields, message_id=None):
+    log_channel = client.get_channel(LOG_CHANNEL_ID)
+    if not log_channel: return
+    embed = discord.Embed(title=title, color=color, timestamp=datetime.datetime.now(datetime.timezone.utc))
+    for name, value in fields.items():
+        embed.add_field(name=name, value=value, inline=False)
+    if message_id:
+        embed.set_footer(text=f"ID сообщения: {message_id}")
+    await log_channel.send(embed=embed)
+
+@client.event
+async def on_message_delete(message):
+    if message.author.bot: return
+    await send_log("Сообщение было удалено", discord.Color.from_rgb(231, 76, 60), {
+        "Автор": f"{message.author.mention} ({message.author.name})",
+        "Канал": message.channel.mention,
+        "Текст": f"```\n{message.content or 'Нет текста'}\n```"
+    }, message.id)
+
+@client.event
+async def on_member_ban(guild, user):
+    async for entry in guild.audit_logs(limit=1, action=discord.AuditLogAction.ban):
+        await send_log("🛑 Пользователь забанен", discord.Color.red(), {
+            "Нарушитель": user.mention,
+            "Модератор": entry.user.mention,
+            "Причина": entry.reason or "Не указана"
+        })
+        break
+
+@client.event
+async def on_member_unban(guild, user):
+    async for entry in guild.audit_logs(limit=1, action=discord.AuditLogAction.unban):
+        await send_log("✅ Пользователь разбанен", discord.Color.green(), {
+            "Пользователь": user.mention,
+            "Модератор": entry.user.mention
+        })
+        break
+
+@client.event
+async def on_member_remove(member):
+    async for entry in member.guild.audit_logs(limit=1, action=discord.AuditLogAction.kick):
+        if entry.target == member:
+            await send_log("🥾 Участник кикнут", discord.Color.gold(), {
+                "Участник": member.mention,
+                "Модератор": entry.user.mention,
+                "Причина": entry.reason or "Не указана"
+            })
+        break
+
+@client.event
+async def on_member_update(before, after):
+    if before.roles != after.roles:
+        async for entry in after.guild.audit_logs(limit=1, action=discord.AuditLogAction.member_role_update):
+            if (datetime.datetime.now(datetime.timezone.utc) - entry.created_at).total_seconds() < 5:
+                moderator = entry.user
+                added = [r for r in after.roles if r not in before.roles]
+                removed = [r for r in before.roles if r not in after.roles]
+                for role in added:
+                    if role.id == MUTE_ROLE_ID:
+                        await send_log("🤐 Пользователь замучен", discord.Color.dark_grey(), {"Участник": after.mention, "Модератор": moderator.mention, "Роль": role.name})
+                for role in removed:
+                    if role.id == MUTE_ROLE_ID:
+                        await send_log("🔓 Пользователь размучен", discord.Color.green(), {"Участник": after.mention, "Модератор": moderator.mention, "Роль": role.name})
+            break
+
+@client.command()
+@commands.has_permissions(manage_messages=True)
+async def clear(ctx, amount: int):
+    deleted = await ctx.channel.purge(limit=amount + 1)
+    await send_log("Очистка сообщений", discord.Color.orange(), {
+        "Модератор": ctx.author.mention,
+        "Канал": ctx.channel.mention,
+        "Удалено": f"{len(deleted)-1} сообщений"
+    })
+
+@client.command()
+@commands.has_permissions(ban_members=True)
+async def ban(ctx, member: discord.Member, *, reason="Без причины"):
+    await member.ban(reason=reason)
+
+@client.command()
+@commands.has_permissions(kick_members=True)
+async def kick(ctx, member: discord.Member, *, reason="Без причины"):
+    await member.kick(reason=reason)
+
+@client.command()
+@commands.has_permissions(ban_members=True)
+async def unban(ctx, user_id: int):
+    user = await client.fetch_user(user_id)
+    await ctx.guild.unban(user)
+
+@client.command()
+@commands.has_permissions(manage_roles=True)
+async def mute(ctx, member: discord.Member, *, reason="Нарушение"):
+    role = ctx.guild.get_role(MUTE_ROLE_ID)
+    await member.add_roles(role, reason=reason)
+
+@client.command()
+@commands.has_permissions(manage_roles=True)
+async def unmute(ctx, member: discord.Member):
+    role = ctx.guild.get_role(MUTE_ROLE_ID)
+    await member.remove_roles(role)
+
+@client.command()
+@commands.has_permissions(manage_roles=True)
+async def warn(ctx, member: discord.Member, *, reason="Нарушение"):
+    await send_log("⚠️ Выдан варн", discord.Color.gold(), {
+        "Нарушитель": member.mention, "Модератор": ctx.author.mention, "Причина": reason
+    })
 
 @client.event
 async def on_ready():
