@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 
 LOG_CHANNEL_ID = 1514982915921150083
 MUTE_ROLE_ID = 1514982507014131828
+LIMIT_ROLE_ID = 1515130377394458644
 
 load_dotenv()
 
@@ -1636,6 +1637,157 @@ async def log_warn(ctx, member: discord.Member, *, reason="Нарушение"):
     await send_log("⚠️ Выдан варн", discord.Color.gold(), {
         "Нарушитель": member.mention, "Модератор": ctx.author.mention, "Причина": reason
     })
+
+user_data = {}
+total_limit_roles_given = 0
+MAX_LIMIT_ROLES = 10
+
+def get_user(uid):
+    if uid not in user_data:
+        user_data[uid] = {"money": 0, "cases": {"1_summer": 0, "2_summer": 0, "3_summer": 0}, "has_role": False}
+    return user_data[uid]
+
+@client.group(name="case", invoke_without_command=True)
+async def case(ctx):
+    await ctx.send("Используй: !case info <название>, !case inventory, или !case open <id>")
+
+@case.command(name="info")
+async def info(ctx, name: str):
+    emb = discord.Embed(title=f"Информация: {name}", color=discord.Color.blue())
+    emb.add_field(name="Возможный дроп:", value="💰 Деньги - от 100,000 до 1,000,000\n📦 1-3 Летние кейсы\n👑 Лимитированная роль (1%)", inline=False)
+    emb.set_footer(text="彡★❄️★彡")
+    await ctx.send(embed=emb)
+
+@case.command(name="inventory")
+async def inventory(ctx):
+    data = get_user(ctx.author.id)
+    inv = data["cases"]
+    msg = f"🎒 Инвентарь {ctx.author.name}:\n"
+    for c_id, count in inv.items():
+        msg += f"• {c_id}: {count} шт.\n"
+    msg += f"\n💰 Баланс: {data['money']:,}"
+    await ctx.send(msg)
+
+@case.command(name="open")
+async def open_case(ctx, case_id: str):
+    global total_limit_roles_given
+    data = get_user(ctx.author.id)
+    
+    if data["cases"].get(case_id, 0) > 0:
+        data["cases"][case_id] -= 1
+        roll = random.random()
+        
+        if roll < 0.01:
+            if total_limit_roles_given < MAX_LIMIT_ROLES:
+                data["has_role"] = True
+                total_limit_roles_given += 1
+                drop_text = "👑 Лимитированная роль (используй !title use)"
+            else:
+                amount = 1000000
+                data["money"] += amount
+                drop_text = f"💸 Роль закончилась! Вам начислено {amount:,} бонусом"
+        elif roll < 0.25:
+            data["cases"]["1_summerlunecase"] += 1
+            drop_text = "📦 1 летний кейс"
+        else:
+            amount = random.choice([100000, 250000, 500000, 800000, 1000000])
+            data["money"] += amount
+            drop_text = f"💸 {amount:,}"
+
+        emb = discord.Embed(title=f"Поздравляем! Ваш дроп за открытие {case_id} 💼:", color=discord.Color.green())
+        emb.description = f"• Открытие кейсов пользователя {ctx.author.name}\n\n• {drop_text} x1"
+        emb.set_footer(text=f"彡★❄️★彡 | Ролей выдано: {total_limit_roles_given}/{MAX_LIMIT_ROLES}")
+        await ctx.send(embed=emb)
+    else:
+        await ctx.send("❌ У тебя нет такого кейса!")
+
+@client.command(name="title")
+async def title(ctx, action: str):
+    if action == "use":
+        data = get_user(ctx.author.id)
+        if data["has_role"]:
+            role = ctx.guild.get_role(LIMIT_ROLE_ID)
+            await ctx.author.add_roles(role)
+            await ctx.send("✅ Роль успешно надета!")
+        else:
+            await ctx.send("❌ У тебя нет доступа к этой роли!")
+
+@case.group(name="title", invoke_without_command=True)
+async def title_group(ctx):
+    await ctx.send("Используй: !title info или !title use")
+
+@title_group.command(name="info")
+async def title_info(ctx):
+    emb = discord.Embed(title="📜 Список доступных ролей", color=discord.Color.gold())
+    emb.add_field(name="⋆˚ sᴜᴍᴍᴇʀLune ⋆˚", value="Способ получения: Выпадение из кейса (SummerCase). Лимит: 10 штук на весь сервер.", inline=False)
+    emb.set_footer(text="彡★❄️★彡")
+    await ctx.send(embed=emb)
+
+@title_group.command(name="use")
+async def title_use(ctx, action: str = None):
+    data = get_user(ctx.author.id)
+    if data["has_role"]:
+        role = ctx.guild.get_role(LIMIT_ROLE_ID)
+        await ctx.author.add_roles(role)
+        await ctx.send("✅ Роль успешно надета!")
+    else:
+        await ctx.send("❌ У тебя нет доступа к этой роли!")
+
+user_data = {}
+
+def get_user(uid):
+    if uid not in user_data:
+        user_data[uid] = {"money": 0, "cases": {"common": 0}, "has_role": False}
+    return user_data[uid]
+
+@client.group(name="shop", invoke_without_command=True)
+async def shop(ctx):
+    emb = discord.Embed(title="🛒 Магазин", color=discord.Color.purple())
+    emb.add_field(name="Common case", value="Цена: 1,000,000\nКоманда: !shop buy common <кол-во>", inline=False)
+    await ctx.send(embed=emb)
+
+@shop.command(name="buy")
+async def shop_buy(ctx, case_name: str, amount: int = 1):
+    data = get_user(ctx.author.id)
+    if case_name == "common":
+        cost = 1000000 * amount
+        if data["money"] >= cost:
+            data["money"] -= cost
+            data["cases"]["common"] += amount
+            await ctx.send(f"✅ Куплено {amount} Common case!")
+        else:
+            await ctx.send("❌ Недостаточно денег!")
+    else:
+        await ctx.send("❌ Такого кейса нет в магазине.")
+
+@client.command(name="commonopen")
+async def common_open(ctx):
+    data = get_user(ctx.author.id)
+    if data["cases"].get("common", 0) > 0:
+        data["cases"]["common"] -= 1
+        roll = random.random()
+        msg = "💼 Результат открытия:"
+        if roll < 0.80:
+            data["money"] += 100000
+            msg += "\n• 💸 100,000"
+        elif roll < 0.75:
+            data["money"] += 250000
+            msg += "\n• 💸 250,000"
+        elif roll < 0.50:
+            data["money"] += 500000
+            msg += "\n• 💸 500,000"
+        elif roll < 0.10:
+            data["cases"]["1_summer"] = data["cases"].get("1_summer", 0) + 1
+            msg += "\n• 📦 1 летний кейс"
+        elif roll < 0.05:
+            data["cases"]["2_summer"] = data["cases"].get("2_summer", 0) + 1
+            msg += "\n• 📦 2 летний кейс"
+        elif roll < 0.01:
+            data["cases"]["3_summer"] = data["cases"].get("3_summer", 0) + 1
+            msg += "\n• 📦 3 летний кейс"
+        await ctx.send(msg)
+    else:
+        await ctx.send("❌ У вас нет Common case!")
 
 @client.event
 async def on_ready():
