@@ -1587,52 +1587,52 @@ async def clear(ctx, amount: int):
         "Удалено": f"{len(deleted)-1} сообщений"
     })
 
-@client.command(name="ban")
+@client.command(name="log_ban")
 @commands.has_permissions(ban_members=True)
-async def ban(ctx, member: discord.Member, *, reason="Без причины"):
+async def log_ban(ctx, member: discord.Member, *, reason="Без причины"):
     await member.ban(reason=reason)
     await send_log("🔨 Бан участника", discord.Color.red(), {
         "Нарушитель": member.mention, "Модератор": ctx.author.mention, "Причина": reason
     })
 
-@client.command(name="kick")
+@client.command(name="log_kick")
 @commands.has_permissions(kick_members=True)
-async def kick(ctx, member: discord.Member, *, reason="Без причины"):
+async def log_kick(ctx, member: discord.Member, *, reason="Без причины"):
     await member.kick(reason=reason)
     await send_log("👢 Кик участника", discord.Color.orange(), {
         "Нарушитель": member.mention, "Модератор": ctx.author.mention, "Причина": reason
     })
 
-@client.command(name="unban")
+@client.command(name="log_unban")
 @commands.has_permissions(ban_members=True)
-async def unban(ctx, user_id: int):
+async def log_unban(ctx, user_id: int):
     user = await client.fetch_user(user_id)
     await ctx.guild.unban(user)
     await send_log("🕊️ Разбан участника", discord.Color.green(), {
         "ID пользователя": user_id, "Модератор": ctx.author.mention
     })
 
-@client.command(name="mute")
+@client.command(name="log_mute")
 @commands.has_permissions(manage_roles=True)
-async def mute(ctx, member: discord.Member, *, reason="Нарушение"):
+async def log_mute(ctx, member: discord.Member, *, reason="Нарушение"):
     role = ctx.guild.get_role(MUTE_ROLE_ID)
     await member.add_roles(role, reason=reason)
     await send_log("🔇 Мут участника", discord.Color.dark_grey(), {
         "Нарушитель": member.mention, "Модератор": ctx.author.mention, "Причина": reason
     })
 
-@client.command(name="unmute")
+@client.command(name="log_unmute")
 @commands.has_permissions(manage_roles=True)
-async def unmute(ctx, member: discord.Member):
+async def log_unmute(ctx, member: discord.Member):
     role = ctx.guild.get_role(MUTE_ROLE_ID)
     await member.remove_roles(role)
     await send_log("🔊 Размут участника", discord.Color.blue(), {
         "Пользователь": member.mention, "Модератор": ctx.author.mention
     })
 
-@client.command(name="warn")
+@client.command(name="log_warn")
 @commands.has_permissions(manage_roles=True)
-async def warn(ctx, member: discord.Member, *, reason="Нарушение"):
+async def log_warn(ctx, member: discord.Member, *, reason="Нарушение"):
     await send_log("⚠️ Выдан варн", discord.Color.gold(), {
         "Нарушитель": member.mention, "Модератор": ctx.author.mention, "Причина": reason
     })
