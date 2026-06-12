@@ -166,7 +166,7 @@ async def kick(interaction: discord.Interaction, member: discord.Member, reason:
         await interaction.response.send_message(f"❌ Ошибка при кике: {e}", ephemeral=True)
 
 @client.command(name="clear")
-@commands.has_any_role("Project Leaders", "Staff Manager", "Curator", "Main Administrator", "Administrator", "Moderator")
+@commands.has_any_role("Scarletᵒʷⁿᵉʳ", "Staff Manager", "Curator", "Main Administrator", "Administrator", "Moderator")
 async def clear(ctx, amount: int):
     if amount < 1:
         await ctx.send("Укажите число больше 0")
@@ -217,7 +217,7 @@ async def unmute(ctx, member: discord.Member, *, reason: str = "Без прич�
         await ctx.send(f"❌ Ошибка при размуте: {e}")
 
 @client.command(name="warn")
-@commands.has_any_role("Scarlet owner", "Co-Owner", "Curator", "Staff Manager")
+@commands.has_any_role("Scarletᵒʷⁿᵉʳ", "Co-Owner", "Curator", "Staff Manager")
 async def warn(ctx, member: discord.Member, *, reason: str = "Без причины"):
     import json
     import os
@@ -278,7 +278,7 @@ async def warn(ctx, member: discord.Member, *, reason: str = "Без причи�
         await ctx.send(embed=emb)
 
 @client.command(name="unwarn")
-@commands.has_any_role("Scarlet owner", "Co-Owner", "Curator", "Staff Manager")
+@commands.has_any_role("Scarletᵒʷⁿᵉʳ", "Co-Owner", "Curator", "Staff Manager")
 async def unwarn(ctx, member: discord.Member, *, reason: str = "Без причины"):
     import json
     import os
@@ -311,7 +311,7 @@ async def unwarn(ctx, member: discord.Member, *, reason: str = "Без прич�
     await ctx.send(embed=emb)
     
 @client.command(name="warn_list")
-@commands.has_any_role("Scarlet owner", "Co-Owner", "Curator", "Staff Manager")
+@commands.has_any_role("Scarletᵒʷⁿᵉʳ", "Co-Owner", "Curator", "Staff Manager")
 async def warn_list(ctx):
     import json
     import os
