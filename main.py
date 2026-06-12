@@ -1687,7 +1687,7 @@ async def open_case(ctx, case_id: str):
                 data["money"] += amount
                 drop_text = f"💸 Роль закончилась! Вам начислено {amount:,} бонусом"
         elif roll < 0.25:
-            data["cases"]["1_summerlunecase"] += 1
+            data["cases"]["1_summer"] += 1
             drop_text = "📦 1 летний кейс"
         else:
             amount = random.choice([100000, 250000, 500000, 800000, 1000000])
