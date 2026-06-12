@@ -166,14 +166,12 @@ async def kick(interaction: discord.Interaction, member: discord.Member, reason:
         await interaction.response.send_message(f"❌ Ошибка при кике: {e}", ephemeral=True)
 
 @client.command(name="clear")
-@commands.has_any_role("Scarletᵒʷⁿᵉʳ", "Staff Manager", "Curator", "Main Administrator", "Administrator", "Moderator")
+@commands.has_any_role("Персонал", "Старший персонал")
 async def clear(ctx, amount: int):
     if amount < 1:
         await ctx.send("Укажите число больше 0")
         return
-
     deleted = await ctx.channel.purge(limit=amount + 1)
-    
     await ctx.send(f"Успешно удалено {len(deleted) - 1} сообщений", delete_after=5)
 
 @clear.error
@@ -1576,9 +1574,12 @@ async def on_member_update(before, after):
                         await send_log("🔓 Пользователь размучен", discord.Color.green(), {"Участник": after.mention, "Модератор": moderator.mention, "Роль": role.name})
             break
 
-@client.command()
-@commands.has_permissions(manage_messages=True)
+@client.command(name="clear")
+@commands.has_any_role("Персонал", "Старший персонал")
 async def clear(ctx, amount: int):
+    if amount < 1:
+        await ctx.send("Укажите число больше 0")
+        return
     deleted = await ctx.channel.purge(limit=amount + 1)
     await send_log("Очистка сообщений", discord.Color.orange(), {
         "Модератор": ctx.author.mention,
