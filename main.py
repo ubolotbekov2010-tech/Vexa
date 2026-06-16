@@ -1680,34 +1680,49 @@ async def inventory(ctx):
 @case.command(name="open")
 async def open_case(ctx, case_id: str):
     global total_limit_roles_given
-    data = get_user(ctx.author.id)
+    file_path = "economy.json"
     
-    if data["cases"].get(case_id, 0) > 0:
-        data["cases"][case_id] -= 1
+    with open(file_path, "r") as f:
+        data = json.load(f)
+
+    guild_id = str(ctx.guild.id)
+    user_id = str(ctx.author.id)
+    
+    if guild_id not in data or user_id not in data[guild_id]:
+        await ctx.send("❌ У вас нет данных в базе.")
+        return
+        
+    user_data = data[guild_id][user_id]
+    
+    if user_data.get("cases", {}).get(case_id, 0) > 0:
+        user_data["cases"][case_id] -= 1
         roll = random.random()
         
         if roll < 0.01:
             if total_limit_roles_given < MAX_LIMIT_ROLES:
-                data["has_role"] = True
+                user_data["has_role"] = True
                 total_limit_roles_given += 1
                 drop_text = "👑 Лимитированная роль (используй !title use)"
             else:
                 amount = 1000000
-                data["money"] += amount
+                user_data["balance"] += amount
                 drop_text = f"💸 Роль закончилась! Вам начислено {amount:,}$ бонусом"
         
         elif case_id == "common" and roll < 0.25:
-            data["cases"]["summer"] += 1
+            user_data["cases"]["summer"] = user_data["cases"].get("summer", 0) + 1
             drop_text = "📦 1 летний кейс (summer)"
         
         else:
             amount = random.choice([100000, 250000, 500000, 800000, 1000000])
-            data["money"] += amount
+            user_data["balance"] += amount
             drop_text = f"💸 {amount:,}$"
+
+        with open(file_path, "w") as f:
+            json.dump(data, f, indent=4)
 
         emb = discord.Embed(title=f"Поздравляем! Ваш дроп за открытие {case_id} 💼:", color=discord.Color.green())
         emb.description = f"• Открытие кейсов пользователя {ctx.author.name}\n\n• {drop_text}"
-        emb.add_field(name="💰 Текущий баланс", value=f"{data['money']:,}$", inline=False)
+        emb.add_field(name="💰 Текущий баланс", value=f"{user_data['balance']:,}$", inline=False)
         emb.set_footer(text=f"彡★❄️★彡 | Ролей выдано: {total_limit_roles_given}/{MAX_LIMIT_ROLES}")
         await ctx.send(embed=emb)
     else:
@@ -1755,20 +1770,35 @@ def get_user(uid):
 
 @client.command(name="sunset")
 async def sunset(ctx):
-    data = get_user(ctx.author.id)
+    file_path = "economy.json"
+    with open(file_path, "r") as f:
+        data = json.load(f)
+
+    guild_id = str(ctx.guild.id)
+    user_id = str(ctx.author.id)
+
+    if guild_id not in data: data[guild_id] = {}
+    if user_id not in data[guild_id]: data[guild_id][user_id] = {"balance": 0, "bank": 0, "cases": {}, "sunset_cooldown": 0}
+    
+    user_data = data[guild_id][user_id]
     
     if SUNSET_ROLE_ID not in [r.id for r in ctx.author.roles]:
         await ctx.send("❌ У вас нет роли ⋆˚ sᴜᴍᴍᴇʀLune ⋆˚!")
         return
         
     current_time = time.time()
-    if current_time - data["sunset_cooldown"] < 900:
-        remaining = int(900 - (current_time - data["sunset_cooldown"]))
+    last_use = user_data.get("sunset_cooldown", 0)
+    
+    if current_time - last_use < 900:
+        remaining = int(900 - (current_time - last_use))
         await ctx.send(f"Вы сможете использовать эту команду через {remaining // 60} минут и {remaining % 60} секунд.")
         return
         
-    data["money"] += 3000000
-    data["sunset_cooldown"] = current_time
+    user_data["balance"] += 3000000
+    user_data["sunset_cooldown"] = current_time
+    
+    with open(file_path, "w") as f:
+        json.dump(data, f, indent=4)
     
     emb = discord.Embed(title="Sunset Bonus", color=discord.Color.dark_grey())
     emb.description = f"{ctx.author.mention} только что активировал Sunset и получил **3,000,000$**."
@@ -1787,9 +1817,19 @@ async def shop(ctx):
 
 @shop.command(name="buy")
 async def shop_buy(ctx, case_name: str, amount: int = 1):
-    data = get_user(ctx.author.id)
-    prices = {"common": 1000000}
+    file_path = "economy.json"
+    with open(file_path, "r") as f:
+        data = json.load(f)
+
+    guild_id = str(ctx.guild.id)
+    user_id = str(ctx.author.id)
+
+    if guild_id not in data: data[guild_id] = {}
+    if user_id not in data[guild_id]: data[guild_id][user_id] = {"balance": 0, "bank": 0}
     
+    user_data = data[guild_id][user_id]
+    
+    prices = {"common": 1000000}
     if case_name not in prices:
         await ctx.send("❌ Этот кейс нельзя купить!")
         return
@@ -1800,38 +1840,56 @@ async def shop_buy(ctx, case_name: str, amount: int = 1):
         
     total_cost = price * amount
     
-    if data["money"] >= total_cost:
-        data["money"] -= total_cost
-        data["cases"][case_name] = data["cases"].get(case_name, 0) + amount
+    if user_data.get("balance", 0) >= total_cost:
+        user_data["balance"] -= total_cost
+        
+        with open(file_path, "w") as f:
+            json.dump(data, f, indent=4)
+            
         await ctx.send(f"✅ Успешно куплено {amount} шт. {case_name} за {total_cost:,}$!")
     else:
         await ctx.send(f"❌ Недостаточно средств! Нужно: {total_cost:,}$")
 
 @client.command(name="commonopen")
 async def common_open(ctx):
-    data = get_user(ctx.author.id)
-    if data["cases"].get("common", 0) > 0:
-        data["cases"]["common"] -= 1
+    file_path = "economy.json"
+    with open(file_path, "r") as f:
+        data = json.load(f)
+
+    guild_id = str(ctx.guild.id)
+    user_id = str(ctx.author.id)
+
+    if guild_id not in data or user_id not in data[guild_id]:
+        await ctx.send("❌ У вас нет данных в базе.")
+        return
+        
+    user_data = data[guild_id][user_id]
+    
+    if user_data.get("cases", {}).get("common", 0) > 0:
+        user_data["cases"]["common"] -= 1
         roll = random.random()
         msg = "💼 Результат открытия:"
         
         if roll < 0.10:
-            data["money"] += 100000
-            msg += "\n• 💸 100,000"
+            user_data["balance"] += 100000
+            msg += "\n• 💸 100,000$"
         elif roll < 0.20:
-            data["money"] += 250000
-            msg += "\n• 💸 250,000"
+            user_data["balance"] += 250000
+            msg += "\n• 💸 250,000$"
         elif roll < 0.30:
-            data["money"] += 500000
-            msg += "\n• 💸 500,000"
+            user_data["balance"] += 500000
+            msg += "\n• 💸 500,000$"
         elif roll < 0.35:
-            data["cases"]["summer"] = data["cases"].get("summer", 0) + 1
+            user_data["cases"]["summer"] = user_data["cases"].get("summer", 0) + 1
             msg += "\n• 📦 1 Летний кейс"
         else:
-            data["money"] += 1000000
-            msg += "\n• 💸 1,000,000"
+            user_data["balance"] += 1000000
+            msg += "\n• 💸 1,000,000$"
             
-        msg += f"\n💰 Ваш баланс: {data['money']:,}$"
+        with open(file_path, "w") as f:
+            json.dump(data, f, indent=4)
+            
+        msg += f"\n💰 Ваш баланс: {user_data['balance']:,}$"
         await ctx.send(msg)
     else:
         await ctx.send("❌ У вас нет Common case!")
