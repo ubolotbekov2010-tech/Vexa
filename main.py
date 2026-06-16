@@ -1667,15 +1667,20 @@ async def info(ctx, name: str):
     emb.set_footer(text="彡★❄️★彡")
     await ctx.send(embed=emb)
 
-@case.command(name="inventory")
-async def inventory(ctx):
-    data = get_user(ctx.author.id)
-    inv = data["cases"]
+@client.command(name="case inventory")
+async def case_inventory(ctx):
+    file_path = "economy.json"
+    with open(file_path, "r") as f:
+        data = json.load(f)
+
+    user_data = data.get(str(ctx.guild.id), {}).get(str(ctx.author.id), {})
+    cases = user_data.get("cases", {})
+    
     msg = f"🎒 Инвентарь {ctx.author.name}:\n"
-    for c_id, count in inv.items():
+    for c_id, count in cases.items():
         msg += f"• {c_id}: {count} шт.\n"
-    msg += f"\n💰 Баланс: {data['money']:,}$"
-    await ctx.send(msg)
+    
+    await ctx.send(msg if cases else "У вас нет кейсов.")
 
 @case.command(name="open")
 async def open_case(ctx, case_id: str):
