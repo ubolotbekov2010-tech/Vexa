@@ -348,17 +348,23 @@ async def warn_list_error(ctx, error):
     if isinstance(error, commands.MissingAnyRole):
         await ctx.send("У вас нет прав для использования этой команды!")
 
-@client.tree.command(name="balance", description="Ваш баланс")
-async def balance(interaction: discord.Interaction):
-    guild_id = str(interaction.guild_id)
-    user_id = str(interaction.user.id)
-
-    if not os.path.exists("economy.json"):
-        await interaction.response.send_message("База данных пуста", ephemeral=True)
+@client.command(name="balance")
+async def balance(ctx):
+    file_path = "economy.json"
+    
+    if not os.path.exists(file_path):
+        await ctx.send("База данных не найдена.")
         return
 
-    with open("economy.json", "r") as f:
-        data = json.load(f)
+    with open(file_path, "r") as f:
+        try:
+            data = json.load(f)
+        except json.JSONDecodeError:
+            await ctx.send("Ошибка чтения базы данных.")
+            return
+
+    guild_id = str(ctx.guild.id)
+    user_id = str(ctx.author.id)
 
     user_data = data.get(guild_id, {}).get(user_id, {})
     
@@ -366,14 +372,17 @@ async def balance(interaction: discord.Interaction):
     bank = user_data.get("bank", 0)
     total = cash + bank
 
-    embed = discord.Embed(title=f"Баланс {interaction.user.display_name}", color=discord.Color.green())
-    embed.set_thumbnail(url=interaction.user.display_avatar.url)
+    embed = discord.Embed(
+        title=f"Баланс {ctx.author.display_name}", 
+        color=discord.Color.green()
+    )
+    embed.set_thumbnail(url=ctx.author.display_avatar.url)
     
     embed.add_field(name="Кошелек", value=f"{cash:,}$", inline=False)
     embed.add_field(name="Банковский счет", value=f"{bank:,}$", inline=False)
     embed.add_field(name="Итого", value=f"{total:,}$", inline=False)
 
-    await interaction.response.send_message(embed=embed)
+    await ctx.send(embed=embed)
     
 @client.tree.command(name="deposit", description="Положить деньги в банк")
 async def deposit(interaction: discord.Interaction, amount: str):
@@ -1737,7 +1746,7 @@ async def title_use(ctx, action: str = None):
         await ctx.send("❌ У тебя нет доступа к этой роли!")
 
 user_data = {}
-SUNSET_ROLE_ID = 123456789012345678
+SUNSET_ROLE_ID = 1515130377394458644
 
 def get_user(uid):
     if uid not in user_data:
