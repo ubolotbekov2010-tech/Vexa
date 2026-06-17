@@ -12,7 +12,9 @@ from dotenv import load_dotenv
 
 LOG_CHANNEL_ID = 1514982915921150083
 MUTE_ROLE_ID = 1514982507014131828
-LIMIT_ROLE_ID = 1515130377394458644
+ROLE_LOOT_STASH_LIMIT_ID = 1516895512207298680
+ROLE_CUSTOM_ID           = 1507844200211681332
+ROLE_SUMMER_LIMIT_ID     = 1515130377394458644
 
 load_dotenv()
 
@@ -956,80 +958,73 @@ class GiveawayView(discord.ui.View):
         self.participants.add(interaction.user.id)
         await interaction.response.send_message("Вы успешно записались на розыгрыш!", ephemeral=True)
 
-@client.tree.command(name="gstart", description="Создать розыгрыш (1d, 1h, 30m, 60s)")
+@client.tree.command(name="gstart", description="Создать розыгрыш")
 @app_commands.checks.has_any_role("Project Leaders", "Main Administrator", "Administrator", "Master Eventer", "Eventer")
 async def gstart(interaction: discord.Interaction, duration: str, winners: int, prize: str):
     total_seconds = 0
-    time_text = ""
+    if "d" in duration: total_seconds = int(duration.replace("d", "")) * 86400
+    elif "h" in duration: total_seconds = int(duration.replace("h", "")) * 3600
+    elif "m" in duration: total_seconds = int(duration.replace("m", "")) * 60
+    elif "s" in duration: total_seconds = int(duration.replace("s", ""))
+    else: total_seconds = int(duration) * 60
 
-    try:
-        if "d" in duration:
-            days = int(duration.replace("d", ""))
-            if days > 28:
-                await interaction.response.send_message("Максимальная длительность — 28 дней!", ephemeral=True)
-                return
-            total_seconds = days * 86400
-            time_text = f"{days} {decl(days, ('день', 'дня', 'дней'))}"
-        elif "h" in duration:
-            hours = int(duration.replace("h", ""))
-            total_seconds = hours * 3600
-            time_text = f"{hours} {decl(hours, ('час', 'часа', 'часов'))}"
-        elif "m" in duration:
-            minutes = int(duration.replace("m", ""))
-            total_seconds = minutes * 60
-            time_text = f"{minutes} {decl(minutes, ('минута', 'минуты', 'минут'))}"
-        elif "s" in duration:
-            seconds = int(duration.replace("s", ""))
-            total_seconds = seconds
-            time_text = f"{seconds} {decl(seconds, ('секунда', 'секунды', 'секунд'))}"
-        else:
-            minutes = int(duration)
-            total_seconds = minutes * 60
-            time_text = f"{minutes} {decl(minutes, ('минута', 'минуты', 'минут'))}"
-    except ValueError:
-        await interaction.response.send_message("Ошибка: укажи время правильно (например: 1d, 1h, 30m, 60)", ephemeral=True)
+    if total_seconds > 31 * 86400:
+        await interaction.response.send_message("Максимальная длительность — 31 день!", ephemeral=True)
         return
-
+    
     view = GiveawayView()
-    embed = discord.Embed(
-        title=f"🎉 {prize}",
-        description=f"Нажмите на кнопку ниже, чтобы принять участие!\n\nОрганизатор: {interaction.user.mention}\nКоличество победителей: {winners}",
-        color=discord.Color.blue()
-    )
-    embed.set_footer(text=f"Розыгрыш закончится через {time_text}")
+    embed = discord.Embed(title=f"🎉 {prize}", color=discord.Color.blue())
+    embed.add_field(name="Участников", value="0", inline=True)
+    embed.add_field(name="Осталось", value="...", inline=True)
     
     await interaction.response.send_message(embed=embed, view=view)
     msg = await interaction.original_response()
-    
-    await asyncio.sleep(total_seconds)
-    
+
+    end_time = discord.utils.utcnow() + datetime.timedelta(seconds=total_seconds)
+
+    while discord.utils.utcnow() < end_time:
+        remaining = end_time - discord.utils.utcnow()
+        total_rem = int(remaining.total_seconds())
+        d, rem = divmod(total_rem, 86400)
+        h, rem = divmod(rem, 3600)
+        m, s = divmod(rem, 60)
+        time_text = f"{d}d {h}h {m}m {s}s"
+        
+        embed.set_field_at(0, name="Участников", value=str(len(view.participants)), inline=True)
+        embed.set_field_at(1, name="Осталось", value=time_text, inline=True)
+        await msg.edit(embed=embed)
+        await asyncio.sleep(1)
+
     participants = list(view.participants)
     if len(participants) < winners:
-        await msg.reply("Недостаточно участников для определения победителей!")
+        await msg.reply("Недостаточно участников!")
         return
-        
-    winners_list = random.sample(participants, winners)
-    winners_mentions = ", ".join([f"<@{w_id}>" for w_id in winners_list])
+
+    winners_list = []
+    temp_participants = participants[:]
     
+    for _ in range(winners):
+        if not temp_participants: break
+        found_winner = None
+        for uid in temp_participants:
+            member = interaction.guild.get_member(uid)
+            if member and any(r.id == ROLE_LOOT_STASH_LIMIT_ID for r in member.roles):
+                if random.random() <= 0.25:
+                    found_winner = uid
+                    break
+        
+        if not found_winner:
+            found_winner = random.choice(temp_participants)
+            
+        winners_list.append(found_winner)
+        temp_participants.remove(found_winner)
+    
+    mentions = ", ".join([f"<@{w_id}>" for w_id in winners_list])
     embed.title = f"Розыгрыш завершен: {prize}"
-    embed.description = f"Организатор: {interaction.user.mention}\nУчастников: {len(participants)}\nПобедители: {winners_mentions}"
+    embed.description = f"Победители: {mentions}"
     embed.color = discord.Color.gold()
-    embed.set_footer(text="Розыгрыш окончен")
-    
-    for child in view.children:
-        child.disabled = True
-        
-    await msg.edit(embed=embed, view=view)
-
-    if len(winners_list) == 1:
-        await msg.reply(f"Поздравляем победителя: {winners_mentions}! Ты выиграл {prize}!")
-    else:
-        await msg.reply(f"Поздравляем победителей: {winners_mentions}! Вы выиграли {prize}!")
-
-@gstart.error
-async def gstart_error(interaction: discord.Interaction, error):
-    if isinstance(error, app_commands.MissingAnyRole):
-        await interaction.response.send_message("У вас нет прав для запуска розыгрыша!", ephemeral=True)
+    await msg.edit(embed=embed, view=None)
+    await msg.reply(f"Поздравляем: {mentions}!")
 
 user_data = {}
 voice_timers = {}
@@ -1648,8 +1643,8 @@ async def log_warn(ctx, member: discord.Member, *, reason="Нарушение"):
     })
 
 user_data = {}
-total_limit_roles_given = 0
-MAX_LIMIT_ROLES = 10
+total_limit_roles_1_given = 0
+MAX_LIMIT_1_ROLES = 10
 
 def get_user(uid):
     if uid not in user_data:
@@ -1667,78 +1662,141 @@ async def info(ctx, name: str):
     emb.set_footer(text="彡★❄️★彡")
     await ctx.send(embed=emb)
 
-@client.command(name="case inventory")
+@case.command(name="inventory")
 async def case_inventory(ctx):
     file_path = "economy.json"
-    with open(file_path, "r") as f:
-        data = json.load(f)
-
-    user_data = data.get(str(ctx.guild.id), {}).get(str(ctx.author.id), {})
-    cases = user_data.get("cases", {})
-    
-    msg = f"🎒 Инвентарь {ctx.author.name}:\n"
-    for c_id, count in cases.items():
-        msg += f"• {c_id}: {count} шт.\n"
-    
-    await ctx.send(msg if cases else "У вас нет кейсов.")
-
-@case.command(name="open")
-async def open_case(ctx, case_id: str):
-    global total_limit_roles_given
-    file_path = "economy.json"
-    
     with open(file_path, "r") as f:
         data = json.load(f)
 
     guild_id = str(ctx.guild.id)
     user_id = str(ctx.author.id)
     
-    if guild_id not in data or user_id not in data[guild_id]:
-        await ctx.send("❌ У вас нет данных в базе.")
-        return
-        
-    user_data = data[guild_id][user_id]
+    user_data = data.get(guild_id, {}).get(user_id, {})
+    cases = user_data.get("cases", {})
+    balance = user_data.get("balance", 0)
     
-    if user_data.get("cases", {}).get(case_id, 0) > 0:
-        user_data["cases"][case_id] -= 1
-        roll = random.random()
+    msg = f"🎒 Инвентарь {ctx.author.name}:\n"
+    
+    case_names = {
+        "caseception": "Caseception",
+        "money_case": "Money Case",
+        "loot_stash": "Loot Stash",
+        "common": "Common Case",
+        "summer": "Summer Case"
+    }
+    
+    found_any = False
+    for key, name in case_names.items():
+        count = cases.get(key, 0)
+        if count > 0:
+            msg += f"• **{name}**: {count} шт.\n"
+            found_any = True
+    
+    if not found_any:
+        msg += "Кейсов нет.\n"
         
-        if roll < 0.01:
+    msg += f"\n💰 Баланс: {balance:,}$"
+    await ctx.send(msg)
+
+MAX_LIMIT_ROLES = 10
+LIMIT_ROLE_2_MAX = 100
+
+total_limit_roles_given = 0
+total_limit_roles_2_given = 0
+
+@case.command(name="open")
+async def open_case(ctx, case_id: str):
+    global total_limit_roles_given, total_limit_roles_2_given
+    data = get_user(ctx.author.id)
+    
+    if data["cases"].get(case_id, 0) <= 0:
+        await ctx.send("❌ У тебя нет такого кейса!")
+        return
+
+    data["cases"][case_id] -= 1
+    roll = random.random()
+    drop_text = ""
+
+    if case_id == "caseception":
+        sub_roll = random.random()
+        if sub_roll < 0.25:
+            q = 3 if roll < 0.15 else (2 if roll < 0.50 else 1)
+            data["cases"]["loot_stash"] = data["cases"].get("loot_stash", 0) + q
+            drop_text = f"📦 {q} шт. Loot Stash"
+        elif sub_roll < 0.50:
+            q = 3 if roll < 0.45 else (2 if roll < 0.65 else 1)
+            data["cases"]["common"] = data["cases"].get("common", 0) + q
+            drop_text = f"📦 {q} шт. Common Case"
+        elif sub_roll < 0.75:
+            q = 3 if roll < 0.10 else (2 if roll < 0.25 else 1)
+            data["cases"]["summer"] = data["cases"].get("summer", 0) + q
+            drop_text = f"📦 {q} шт. Summer Case"
+        else:
+            amt = random.choice([100000, 500000, 1000000])
+            data["money"] += amt
+            drop_text = f"💸 {amt:,}$"
+
+    elif case_id == "money_case":
+        amt = 1000000 if roll < 0.20 else (500000 if roll < 0.45 else (300000 if roll < 0.60 else (200000 if roll < 0.70 else 100000)))
+        data["money"] += amt
+        drop_text = f"💸 {amt:,}$"
+    
+    elif case_id == "loot_stash":
+        if roll < 0.05:
             if total_limit_roles_given < MAX_LIMIT_ROLES:
-                user_data["has_role"] = True
+                data["has_role"] = True
                 total_limit_roles_given += 1
+                drop_text = f"👑 Лимитированная роль ({total_limit_roles_given}/{MAX_LIMIT_ROLES})"
+            else:
+                data["money"] += 1000000
+                drop_text = "💸 Лимит ролей исчерпан! Бонус 1,000,000$"
+        elif roll < 0.15:
+            data["has_custom_role"] = True
+            drop_text = "✨ Кастомная роль"
+        else:
+            amt = random.choice([250000, 750000])
+            data["money"] += amt
+            drop_text = f"💸 {amt:,}$"
+
+    elif case_id == "common":
+        if roll < 0.25:
+            data["cases"]["summer"] = data["cases"].get("summer", 0) + 1
+            drop_text = "📦 1 Summer Case"
+        else:
+            data["money"] += 500000
+            drop_text = "💸 500,000$"
+    
+    elif case_id == "summer":
+        if roll < 0.01:
+            if total_limit_roles_2_given < LIMIT_ROLE_2_MAX:
+                data["has_role_2"] = True
+                total_limit_roles_2_given += 1
                 drop_text = "👑 Лимитированная роль (используй !title use)"
             else:
                 amount = 1000000
-                user_data["balance"] += amount
+                data["money"] += amount
                 drop_text = f"💸 Роль закончилась! Вам начислено {amount:,}$ бонусом"
-        
-        elif case_id == "common" and roll < 0.25:
-            user_data["cases"]["summer"] = user_data["cases"].get("summer", 0) + 1
-            drop_text = "📦 1 летний кейс (summer)"
-        
         else:
             amount = random.choice([100000, 250000, 500000, 800000, 1000000])
-            user_data["balance"] += amount
+            data["money"] += amount
             drop_text = f"💸 {amount:,}$"
 
-        with open(file_path, "w") as f:
-            json.dump(data, f, indent=4)
+    emb = discord.Embed(title=f"Поздравляем! Ваш дроп за открытие {case_id} 💼:", color=discord.Color.green())
+    emb.description = f"• Открытие кейсов пользователя {ctx.author.name}\n\n• {drop_text}"
+    emb.add_field(name="💰 Текущий баланс", value=f"{data['money']:,}$", inline=False)
+    emb.set_footer(text=f"彡★❄️★彡 | R1: {total_limit_roles_given}/{MAX_LIMIT_ROLES} | R2: {total_limit_roles_2_given}/{LIMIT_ROLE_2_MAX}")
+    await ctx.send(embed=emb)
 
-        emb = discord.Embed(title=f"Поздравляем! Ваш дроп за открытие {case_id} 💼:", color=discord.Color.green())
-        emb.description = f"• Открытие кейсов пользователя {ctx.author.name}\n\n• {drop_text}"
-        emb.add_field(name="💰 Текущий баланс", value=f"{user_data['balance']:,}$", inline=False)
-        emb.set_footer(text=f"彡★❄️★彡 | Ролей выдано: {total_limit_roles_given}/{MAX_LIMIT_ROLES}")
-        await ctx.send(embed=emb)
-    else:
-        await ctx.send("❌ У тебя нет такого кейса!")
+    inventory_cmd = ctx.bot.get_command("case").get_command("inventory")
+    if inventory_cmd:
+        await ctx.invoke(inventory_cmd)
 
 @client.command(name="title")
 async def title(ctx, action: str):
     if action == "use":
         data = get_user(ctx.author.id)
         if data["has_role"]:
-            role = ctx.guild.get_role(LIMIT_ROLE_ID)
+            role = ctx.guild.get_role(ROLE_SUMMER_LIMIT_ID)
             await ctx.author.add_roles(role)
             await ctx.send("✅ Роль успешно надета!")
         else:
@@ -1759,7 +1817,7 @@ async def title_info(ctx):
 async def title_use(ctx, action: str = None):
     data = get_user(ctx.author.id)
     if data["has_role"]:
-        role = ctx.guild.get_role(LIMIT_ROLE_ID)
+        role = ctx.guild.get_role(ROLE_SUMMER_LIMIT_ID)
         await ctx.author.add_roles(role)
         await ctx.send("✅ Роль успешно надета!")
     else:
@@ -1830,16 +1888,24 @@ async def shop_buy(ctx, case_name: str, amount: int = 1):
     user_id = str(ctx.author.id)
 
     if guild_id not in data: data[guild_id] = {}
-    if user_id not in data[guild_id]: data[guild_id][user_id] = {"balance": 0, "bank": 0}
+    if user_id not in data[guild_id]: 
+        data[guild_id][user_id] = {"balance": 0, "bank": 0, "cases": {}}
     
     user_data = data[guild_id][user_id]
+    if "cases" not in user_data: user_data["cases"] = {}
     
-    prices = {"common": 1000000}
+    prices = {
+        "common": 1000000, 
+        "summer": 2000000,
+        "loot_stash": 10000000
+    }
+    
     if case_name not in prices:
-        await ctx.send("❌ Этот кейс нельзя купить!")
+        await ctx.send(f"❌ Доступны: {', '.join(prices.keys())}")
         return
 
     price = prices[case_name]
+    
     if SUNSET_ROLE_ID in [r.id for r in ctx.author.roles]:
         price = int(price * 0.75)
         
@@ -1847,57 +1913,19 @@ async def shop_buy(ctx, case_name: str, amount: int = 1):
     
     if user_data.get("balance", 0) >= total_cost:
         user_data["balance"] -= total_cost
+        user_data["cases"][case_name] = user_data["cases"].get(case_name, 0) + amount
         
         with open(file_path, "w") as f:
             json.dump(data, f, indent=4)
             
-        await ctx.send(f"✅ Успешно куплено {amount} шт. {case_name} за {total_cost:,}$!")
+        await ctx.send(f"✅ Куплено {amount} шт. {case_name} за {total_cost:,}$!")
+        
+        inventory_cmd = ctx.bot.get_command("case").get_command("inventory")
+        if inventory_cmd:
+            await ctx.invoke(inventory_cmd)
+            
     else:
         await ctx.send(f"❌ Недостаточно средств! Нужно: {total_cost:,}$")
-
-@client.command(name="commonopen")
-async def common_open(ctx):
-    file_path = "economy.json"
-    with open(file_path, "r") as f:
-        data = json.load(f)
-
-    guild_id = str(ctx.guild.id)
-    user_id = str(ctx.author.id)
-
-    if guild_id not in data or user_id not in data[guild_id]:
-        await ctx.send("❌ У вас нет данных в базе.")
-        return
-        
-    user_data = data[guild_id][user_id]
-    
-    if user_data.get("cases", {}).get("common", 0) > 0:
-        user_data["cases"]["common"] -= 1
-        roll = random.random()
-        msg = "💼 Результат открытия:"
-        
-        if roll < 0.10:
-            user_data["balance"] += 100000
-            msg += "\n• 💸 100,000$"
-        elif roll < 0.20:
-            user_data["balance"] += 250000
-            msg += "\n• 💸 250,000$"
-        elif roll < 0.30:
-            user_data["balance"] += 500000
-            msg += "\n• 💸 500,000$"
-        elif roll < 0.35:
-            user_data["cases"]["summer"] = user_data["cases"].get("summer", 0) + 1
-            msg += "\n• 📦 1 Летний кейс"
-        else:
-            user_data["balance"] += 1000000
-            msg += "\n• 💸 1,000,000$"
-            
-        with open(file_path, "w") as f:
-            json.dump(data, f, indent=4)
-            
-        msg += f"\n💰 Ваш баланс: {user_data['balance']:,}$"
-        await ctx.send(msg)
-    else:
-        await ctx.send("❌ У вас нет Common case!")
 
 last_free_claim = {}
 
@@ -1926,6 +1954,47 @@ def get_user(uid):
     if uid not in user_data:
         user_data[uid] = {"money": 0, "cases": {"1_summer": 0, "2_summer": 0, "3_summer": 0, "common": 0}, "has_role": False}
     return user_data[uid]
+
+@client.group(name="a")
+async def a(ctx):
+    pass
+
+@a.group(name="i")
+async def i(ctx):
+    pass
+
+@i.command(name="case")
+@commands.has_role("Scarletᵒʷⁿᵉʳ")
+async def i_case(ctx, case_name: str, amount: int, member: discord.Member):
+    file_path = "economy.json"
+    
+    with open(file_path, "r") as f:
+        data = json.load(f)
+
+    guild_id = str(ctx.guild.id)
+    user_id = str(member.id)
+
+    if guild_id not in data: 
+        data[guild_id] = {}
+    if user_id not in data[guild_id]: 
+        data[guild_id][user_id] = {"balance": 0, "bank": 0, "cases": {}}
+    
+    if "cases" not in data[guild_id][user_id]: 
+        data[guild_id][user_id]["cases"] = {}
+
+    data[guild_id][user_id]["cases"][case_name] = data[guild_id][user_id]["cases"].get(case_name, 0) + amount
+
+    with open(file_path, "w") as f:
+        json.dump(data, f, indent=4)
+
+    await ctx.send(f"✅ Выдано {amount} шт. {case_name} пользователю {member.mention}")
+
+@i_case.error
+async def i_case_error(ctx, error):
+    if isinstance(error, commands.MissingRole):
+        await ctx.send("❌ У тебя нет прав Owner!")
+    elif isinstance(error, commands.MemberNotFound):
+        await ctx.send("❌ Участник не найден!")
 
 @client.event
 async def on_ready():
