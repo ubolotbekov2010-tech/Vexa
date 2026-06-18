@@ -1931,8 +1931,8 @@ def get_user(uid):
 async def shop(ctx):
     embed = discord.Embed(title="🛒 Магазин", color=discord.Color.purple())
     embed.add_field(name="Common case", value="Цена: 1,000,000\nКоманда: !shop buy common <кол-во>", inline=False)
-    embed.add_field(name="Loot Stash", value="Цена: 5,000,000\nКоманда: !shop buy loot_stash <кол-во>", inline=False)
-    embed.set_footer(text="Владельцам роли Loot Stash скидка 25%!")
+    embed.add_field(name="Loot Stash", value="Цена: 10,000,000\nКоманда: !shop buy loot_stash <кол-во>", inline=False)
+    embed.set_footer(text="Владельцам роли ⋆˚ sᴜᴍᴍᴇʀLune ⋆˚ скидка 25%!")
     await ctx.send(embed=embed)
 
 @shop.command(name="buy")
@@ -1984,28 +1984,40 @@ async def shop_buy(ctx, case_name: str, amount: int = 1):
     else:
         await ctx.send(f"❌ Недостаточно средств! Нужно: {total_cost:,}$")
 
-last_free_claim = {}
-
 @client.command(name="free")
 async def free_case(ctx):
-    user_id = ctx.author.id
-    now = datetime.datetime.now()
-    
-    if user_id in last_free_claim:
-        last_claim = last_free_claim[user_id]
-        if (now - last_claim).days < 7:
-            days_left = 7 - (now - last_claim).days
-            await ctx.send(f"❌ Вы уже забирали бесплатные кейсы! Можно будет забрать через {days_left} дней.")
-            return
+    file_path = "economy.json"
+    with open(file_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
 
-    data = get_user(user_id)
+    guild_id = str(ctx.guild.id)
+    user_id = str(ctx.author.id)
+
+    if guild_id not in data: data[guild_id] = {}
+    if user_id not in data[guild_id]: 
+        data[guild_id][user_id] = {"balance": 0, "cases": {}, "last_free_claim": "2000-01-01"}
+
+    user_data = data[guild_id][user_id]
+    last_claim_str = user_data.get("last_free_claim", "2000-01-01")
+    last_claim = datetime.datetime.fromisoformat(last_claim_str)
+    now = datetime.datetime.now()
+
+    if (now - last_claim).total_seconds() < 86400:
+        hours_left = 24 - int((now - last_claim).total_seconds() // 3600)
+        await ctx.send(f"❌ Ты уже забирал кейсы! Можно будет забрать через {hours_left} ч.")
+        return
+
+    cases = user_data.get("cases", {})
+    cases["common"] = cases.get("common", 0) + 3
+    cases["summer"] = cases.get("summer", 0) + 3
+    user_data["cases"] = cases
     
-    data["cases"]["common"] = data["cases"].get("common", 0) + 3
-    data["cases"]["1_summer"] = data["cases"].get("1_summer", 0) + 3
+    user_data["last_free_claim"] = now.isoformat()
+
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4)
     
-    last_free_claim[user_id] = now
-    
-    await ctx.send("🎁 Вы успешно получили 3 Common кейса и 3 Летних кейса! Следующий раз можно забрать через 7 дней.")
+    await ctx.send("🎁 Ты успешно получил 3 Common Case и 3 Summer Case! Следующий раз можно забрать через 24 часа.")
 
 def get_user(uid):
     if uid not in user_data:
