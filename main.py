@@ -2072,6 +2072,94 @@ async def i_case_error(ctx, error):
     elif isinstance(error, commands.MemberNotFound):
         await ctx.send("❌ Участник не найден!")
 
+class ApplicationModal(discord.ui.Modal):
+    def __init__(self, position):
+        super().__init__(title=f"Заявка: {position}")
+        self.position = position
+        
+        self.add_item(discord.ui.TextInput(label="Имя и возраст", placeholder="Иван, 16 лет", style=discord.TextStyle.short))
+        self.add_item(discord.ui.TextInput(label="Сколько времени готовы уделять?", placeholder="3-4 часа в день", style=discord.TextStyle.short))
+        self.add_item(discord.ui.TextInput(label="Творческая оценка", placeholder="Оцените свои навыки...", style=discord.TextStyle.paragraph))
+        self.add_item(discord.ui.TextInput(label="Опыт работы", placeholder="Был на таких-то проектах...", style=discord.TextStyle.paragraph))
+        self.add_item(discord.ui.TextInput(label="Что выделяет вас?", placeholder="Расскажите о себе", style=discord.TextStyle.paragraph, max_length=4000))
+
+    async def on_submit(self, interaction: discord.Interaction):
+        guild = interaction.guild
+        category = discord.utils.get(guild.categories, name="Анкеты")
+        if not category:
+            category = await guild.create_category("Анкеты")
+        
+        curator = discord.utils.get(guild.roles, name="Curator")
+        manager = discord.utils.get(guild.roles, name="Staff Manager")
+        
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(read_messages=False),
+            interaction.user: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+            guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+        }
+        
+        if curator:
+            overwrites[curator] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+        if manager:
+            overwrites[manager] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+
+        ticket_channel = await guild.create_text_channel(f"заявка-{interaction.user.name}", category=category, overwrites=overwrites)
+        
+        embed = discord.Embed(title=f"Новая заявка на должность: {self.position}", color=discord.Color.blue())
+        for item in self.children:
+            embed.add_field(name=item.label, value=item.value, inline=False)
+        
+        role_mentions = f"{curator.mention if curator else '<@&1501306966427959406>'} {manager.mention if manager else '<@&1510623453785358406>'}"
+        await ticket_channel.send(
+            content=f"{role_mentions}, рассмотрите заявку!", 
+            embed=embed
+        )
+        
+        await interaction.response.send_message(f"✅ Ваша заявка отправлена в {ticket_channel.mention}", ephemeral=True)
+
+class PositionSelect(discord.ui.Select):
+    def __init__(self):
+        options = [
+            discord.SelectOption(label="Moderator", value="Moderator", emoji="🎛️"),
+            discord.SelectOption(label="Eventer", value="Eventer", emoji="🎯"),
+            discord.SelectOption(label="Support", value="Support", emoji="🦋"),
+        ]
+        super().__init__(placeholder="Выберите должность...", options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        await interaction.response.send_modal(ApplicationModal(self.values[0]))
+
+class QuestionnaireView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        self.add_item(PositionSelect())
+
+@client.event
+async def on_ready():
+    client.add_view(QuestionnaireView())
+    target_channel = client.get_channel(1505855219786055782)
+    if target_channel:
+        async for message in target_channel.history(limit=5):
+            if message.author == client.user and message.components:
+                return
+        
+        embed = discord.Embed(
+            title="💼 Вакансии",
+            description="Выберите должность и отправьте заявку!",
+            color=discord.Color.blue()
+        )
+        await target_channel.send(embed=embed, view=QuestionnaireView())
+
+@client.command()
+@commands.has_permissions(administrator=True)
+async def setup_apply(ctx):
+    embed = discord.Embed(
+        title="💼 Вакансии",
+        description="Выберите должность и отправьте заявку!",
+        color=discord.Color.blue()
+    )
+    await ctx.send(embed=embed, view=QuestionnaireView())
+
 @client.event
 async def on_ready():
     client.add_view(FactionView())
