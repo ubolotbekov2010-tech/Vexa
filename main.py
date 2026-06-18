@@ -1698,8 +1698,8 @@ async def case_inventory(ctx):
     msg += f"\n💰 Баланс: {balance:,}$"
     await ctx.send(msg)
 
-MAX_LIMIT_ROLES = 10
-LIMIT_ROLE_2_MAX = 100
+MAX_LIMIT_ROLES = 100
+LIMIT_ROLE_2_MAX = 10
 
 total_limit_roles_given = 0
 total_limit_roles_2_given = 0
@@ -1816,37 +1816,59 @@ async def open_case(ctx, case_id: str):
     emb.set_footer(text=f"彡★❄️★彡 | R1: {total_limit_roles_given}/{MAX_LIMIT_ROLES} | R2: {total_limit_roles_2_given}/{LIMIT_ROLE_2_MAX}")
     await ctx.send(embed=emb)
 
-@client.command(name="title")
-async def title(ctx, action: str):
-    if action == "use":
-        data = get_user(ctx.author.id)
-        if data["has_role"]:
-            role = ctx.guild.get_role(ROLE_SUMMER_LIMIT_ID)
-            await ctx.author.add_roles(role)
-            await ctx.send("✅ Роль успешно надета!")
-        else:
-            await ctx.send("❌ У тебя нет доступа к этой роли!")
-
 @case.group(name="title", invoke_without_command=True)
-async def title_group(ctx):
+async def title(ctx):
     await ctx.send("Используй: !title info или !title use")
 
-@title_group.command(name="info")
+@title.command(name="info")
 async def title_info(ctx):
     emb = discord.Embed(title="📜 Список доступных ролей", color=discord.Color.gold())
-    emb.add_field(name="⋆˚ sᴜᴍᴍᴇʀLune ⋆˚", value="Способ получения: Выпадение из кейса (SummerCase). Лимит: 10 штук на весь сервер.", inline=False)
+    emb.add_field(name="⋆˚ sᴜᴍᴍᴇʀLune ⋆˚", value="Способ получения: Выпадение из кейса (SummerCase).", inline=False)
+    emb.add_field(name="✨ Кастомная роль", value="Способ получения: Loot Stash", inline=False)
+    emb.add_field(name="👑 Лимитированная роль 2", value="Способ получения: Summer Case", inline=False)
     emb.set_footer(text="彡★❄️★彡")
     await ctx.send(embed=emb)
 
-@title_group.command(name="use")
-async def title_use(ctx, action: str = None):
-    data = get_user(ctx.author.id)
-    if data["has_role"]:
-        role = ctx.guild.get_role(ROLE_SUMMER_LIMIT_ID)
-        await ctx.author.add_roles(role)
-        await ctx.send("✅ Роль успешно надета!")
+@title.command(name="use")
+async def title_use(ctx, role_type: str = "summer"):
+    file_path = "economy.json"
+    with open(file_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    guild_id = str(ctx.guild.id)
+    user_id = str(ctx.author.id)
+
+    if guild_id not in data or user_id not in data[guild_id]:
+        await ctx.send("❌ Профиль не найден!")
+        return
+
+    user_data = data[guild_id][user_id]
+
+    if role_type == "summer":
+        if user_data.get("has_role", False):
+            role = ctx.guild.get_role(ROLE_SUMMER_LIMIT_ID)
+            await ctx.author.add_roles(role)
+            await ctx.send("✅ Роль ⋆˚ sᴜᴍᴍᴇʀLune ⋆˚ надета!")
+        else:
+            await ctx.send("❌ У тебя нет доступа к этой роли!")
+            
+    elif role_type == "custom":
+        if user_data.get("has_custom_role", False):
+            role = ctx.guild.get_role(ROLE_CUSTOM_ID)
+            await ctx.author.add_roles(role)
+            await ctx.send("✅ Кастомная роль надета!")
+        else:
+            await ctx.send("❌ У тебя нет доступа к этой роли!")
+            
+    elif role_type == "limit2":
+        if user_data.get("has_role_2", False):
+            role = ctx.guild.get_role(ROLE_LOOT_STASH_LIMIT_ID)
+            await ctx.author.add_roles(role)
+            await ctx.send("✅ Лимитированная роль 2 надета!")
+        else:
+            await ctx.send("❌ У тебя нет доступа к этой роли!")
     else:
-        await ctx.send("❌ У тебя нет доступа к этой роли!")
+        await ctx.send("Используй: !title use summer, !title use custom или !title use limit2")
 
 user_data = {}
 SUNSET_ROLE_ID = 1515130377394458644
