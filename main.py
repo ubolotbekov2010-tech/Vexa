@@ -1722,10 +1722,6 @@ def save_user(user_id, user_data):
     with open("economy.json", "w") as f:
         json.dump(all_data, f, indent=4)
 
-@client.group(name="case")
-async def case(ctx):
-    pass
-
 @case.command(name="open")
 async def open_case(ctx, case_id: str):
     global total_limit_roles_given, total_limit_roles_2_given
