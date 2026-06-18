@@ -2120,9 +2120,9 @@ class ApplicationModal(discord.ui.Modal):
 class PositionSelect(discord.ui.Select):
     def __init__(self):
         options = [
-            discord.SelectOption(label="Moderator", value="Moderator", emoji="🎛️"),
-            discord.SelectOption(label="Eventer", value="Eventer", emoji="🎯"),
-            discord.SelectOption(label="Support", value="Support", emoji="🦋"),
+            discord.SelectOption(label="Moderator", value="Moderator", emoji="🔵"),
+            discord.SelectOption(label="Eventer", value="Eventer", emoji="🟣"),
+            discord.SelectOption(label="Support", value="Support", emoji="🟡"),
         ]
         super().__init__(placeholder="Выберите должность...", options=options)
 
@@ -2145,8 +2145,12 @@ async def on_ready():
         
         embed = discord.Embed(
             title="💼 Вакансии",
-            description="Выберите должность и отправьте заявку!",
-            color=discord.Color.blue()
+            description="**# ・Вакансии**\n\n"
+                        "Мы очень нуждаемся в рабочих лапках, если у тебя есть достаточно свободного времени и хочешь сделать вклад в развитие проекта — можешь смело оставить свою заявку!\n\n"
+                        "・ <@&1500175396904243434> — Moderator\n"
+                        "・ <@&1500943411371442277> — Eventer\n"
+                        "・ <@&1500942938719522970> — Support",
+            color=discord.Color.red()
         )
         await target_channel.send(embed=embed, view=QuestionnaireView())
 
@@ -2155,8 +2159,12 @@ async def on_ready():
 async def setup_apply(ctx):
     embed = discord.Embed(
         title="💼 Вакансии",
-        description="Выберите должность и отправьте заявку!",
-        color=discord.Color.blue()
+        description="**# ・Вакансии**\n\n"
+                    "Мы очень нуждаемся в рабочих лапках, если у тебя есть достаточно свободного времени и хочешь сделать вклад в развитие проекта — можешь смело оставить свою заявку!\n\n"
+                    "・ <@&1500175396904243434> — Moderator\n"
+                    "・ <@&1500943411371442277> — Eventer\n"
+                    "・ <@&1500942938719522970> — Support",
+        color=discord.Color.red()
     )
     await ctx.send(embed=embed, view=QuestionnaireView())
 
