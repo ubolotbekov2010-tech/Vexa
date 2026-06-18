@@ -8,6 +8,7 @@ import json
 import os
 import random
 import time
+import math
 from dotenv import load_dotenv
 
 LOG_CHANNEL_ID = 1514982915921150083
@@ -464,48 +465,62 @@ async def withdraw(interaction: discord.Interaction, amount: str):
     embed.add_field(name="Итого", value=f"{total:,}$", inline=False)
     await interaction.response.send_message(content=f"Вы сняли {to_withdraw:,}$", embed=embed)
 
-@client.tree.command(name="leaderboard", description="Показать лидеров сервера по кристаликсам")
-async def leaderboard(interaction: discord.Interaction):
-    economy_data = {}
-    if os.path.exists("economy.json"):
-        with open("economy.json", "r") as f:
-            economy_data = json.load(f)
+import math
 
-    guild_id = str(interaction.guild.id)
-    server_data = economy_data.get(guild_id, {})
+class LeaderboardView(discord.ui.View):
+    def __init__(self, data, page=0):
+        super().__init__(timeout=60)
+        self.data = data
+        self.page = page
+        self.items_per_page = 10
+        self.max_pages = math.ceil(len(data) / self.items_per_page)
 
-    sorted_users = sorted(server_data.items(), key=lambda item: item[1].get("balance", 0), reverse=True)[:10]
+    def get_embed(self):
+        start = self.page * self.items_per_page
+        end = start + self.items_per_page
+        page_data = self.data[start:end]
 
-    if not sorted_users:
-        await interaction.response.send_message("❌ Таблица лидеров пуста!", ephemeral=True)
-        return
+        emb = discord.Embed(title=f"🧳 Лидеры: Общий Капитал | Страница {self.page + 1}", color=discord.Color.blue())
+        
+        desc = ""
+        for index, (user_id, data) in enumerate(page_data, start=start + 1):
+            bal = data.get("balance", 0)
+            desc += f"🏅 **{index}.** <@{user_id}>\n💵 **{bal:,} :red_crystal:**\n\n"
+        
+        emb.description = desc if desc else "Пусто"
+        return emb
 
-    def format_money(amount):
-        if amount >= 1000000000:
-            return f"{amount / 1000000000:.2f}B"
-        elif amount >= 1000000:
-            return f"{amount / 1000000:.2f}M"
-        elif amount >= 1000:
-            return f"{amount / 1000:.2f}K"
-        return str(amount)
+    @discord.ui.button(label="⬅️", style=discord.ButtonStyle.primary)
+    async def prev_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.page > 0:
+            self.page -= 1
+            await interaction.response.edit_message(embed=self.get_embed(), view=self)
 
-    user_lines = []
-    for index, (user_id, data) in enumerate(sorted_users, start=1):
-        member = interaction.guild.get_member(int(user_id))
-        name = member.mention if member else f"<@{user_id}>"
-        bal = data.get("balance", 0)
-        user_lines.append(f"🏅 **{index}.** {name}\n💵 **{format_money(bal)} :red_crystal:**")
+    @discord.ui.button(label="➡️", style=discord.ButtonStyle.primary)
+    async def next_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.page < self.max_pages - 1:
+            self.page += 1
+            await interaction.response.edit_message(embed=self.get_embed(), view=self)
 
-    emb = discord.Embed(
-        title="🧳 Лидеры: Общий Капитал | Страница 1",
-        description="\n\n".join(user_lines),
-        color=discord.Color.blue()
+@client.command(name="leaderboard")
+async def leaderboard(ctx):
+    file_path = "economy.json"
+    with open(file_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    server_data = data.get(str(ctx.guild.id), {})
+    
+    sorted_users = sorted(
+        [(uid, udata) for uid, udata in server_data.items() if udata.get("balance", 0) >= 1],
+        key=lambda item: item[1].get("balance", 0), 
+        reverse=True
     )
 
-    if interaction.guild.icon:
-        emb.set_thumbnail(url=interaction.guild.icon.url)
+    if not sorted_users:
+        return await ctx.send("❌ Таблица лидеров пуста!")
 
-    await interaction.response.send_message(embed=emb)
+    view = LeaderboardView(sorted_users)
+    await ctx.send(embed=view.get_embed(), view=view)
 
 @client.tree.command(name="weekly", description="Получить еженедельную награду")
 async def weekly(interaction: discord.Interaction):
@@ -701,7 +716,7 @@ async def pay(interaction: discord.Interaction, member: discord.Member, amount: 
     
     await interaction.response.send_message(embed=emb)
     
-user_cooldowns = {}
+
 
 multipliers = {
     "🍒": 2,
@@ -717,12 +732,6 @@ async def slots(ctx, bet: int):
 
     guild_id = str(ctx.guild.id)
     user_id = str(ctx.author.id)
-    current_time = time.time()
-    last_use = user_cooldowns.get(user_id, 0)
-
-    if current_time - last_use < 20:
-        await ctx.send(f"Подождите {int(20 - (current_time - last_use))} сек.")
-        return
 
     if bet < 1000 or bet > 1000000000:
         await ctx.send("Ставка от 1000 до 1 000 000 000")
@@ -741,8 +750,6 @@ async def slots(ctx, bet: int):
     if bet > cash:
         await ctx.send("Недостаточно средств")
         return
-
-    user_cooldowns[user_id] = current_time
 
     outcome = random.choices(["lose", "partial", "jackpot"], weights=[56, 35, 9], k=1)[0]
     items = ["🍒", "🍋", "🍊", "🍇", "🔔"]
