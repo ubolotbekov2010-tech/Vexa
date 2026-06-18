@@ -2134,6 +2134,31 @@ class QuestionnaireView(discord.ui.View):
         super().__init__(timeout=None)
         self.add_item(PositionSelect())
 
+@client.command()
+async def ticket(ctx, action=None):
+    if action != "close":
+        return 
+
+    curator_role = discord.utils.get(ctx.guild.roles, name="Curator")
+    manager_role = discord.utils.get(ctx.guild.roles, name="Staff Manager")
+    
+    is_authorized = ctx.author.guild_permissions.administrator
+    if (curator_role and curator_role in ctx.author.roles) or (manager_role and manager_role in ctx.author.roles):
+        is_authorized = True
+
+    is_ticket_channel = ctx.channel.category and ctx.channel.category.name == "Анкеты"
+    
+    if not is_ticket_channel:
+        await ctx.send("❌ Эту команду можно использовать только в каналах с заявками!")
+        return
+
+    if is_authorized:
+        await ctx.send("⚠️ Канал будет удален через 5 секунд...")
+        await asyncio.sleep(5)
+        await ctx.channel.delete()
+    else:
+        await ctx.send("❌ У вас нет прав для закрытия заявки!")
+
 @client.event
 async def on_ready():
     client.add_view(QuestionnaireView())
