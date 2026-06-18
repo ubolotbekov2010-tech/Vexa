@@ -1725,83 +1725,96 @@ def save_user(user_id, user_data):
 @case.command(name="open")
 async def open_case(ctx, case_id: str):
     global total_limit_roles_given, total_limit_roles_2_given
-    uid = ctx.author.id
-    data = get_user(uid)
+    file_path = "economy.json"
     
-    if data["cases"].get(case_id, 0) <= 0:
+    with open(file_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    guild_id = str(ctx.guild.id)
+    user_id = str(ctx.author.id)
+
+    if guild_id not in data or user_id not in data[guild_id]:
+        await ctx.send("❌ Профиль не найден!")
+        return
+
+    user_data = data[guild_id][user_id]
+    
+    if user_data.get("cases", {}).get(case_id, 0) <= 0:
         await ctx.send("❌ У тебя нет такого кейса!")
         return
 
-    data["cases"][case_id] -= 1
+    user_data["cases"][case_id] -= 1
     roll = random.random()
     drop_text = ""
-    
+
     if case_id == "caseception":
         sub_roll = random.random()
         if sub_roll < 0.25:
             q = 3 if roll < 0.15 else (2 if roll < 0.50 else 1)
-            data["cases"]["loot_stash"] = data["cases"].get("loot_stash", 0) + q
+            user_data["cases"]["loot_stash"] = user_data["cases"].get("loot_stash", 0) + q
             drop_text = f"📦 {q} шт. Loot Stash"
         elif sub_roll < 0.50:
             q = 3 if roll < 0.45 else (2 if roll < 0.65 else 1)
-            data["cases"]["common"] = data["cases"].get("common", 0) + q
+            user_data["cases"]["common"] = user_data["cases"].get("common", 0) + q
             drop_text = f"📦 {q} шт. Common Case"
         elif sub_roll < 0.75:
             q = 3 if roll < 0.10 else (2 if roll < 0.25 else 1)
-            data["cases"]["summer"] = data["cases"].get("summer", 0) + q
+            user_data["cases"]["summer"] = user_data["cases"].get("summer", 0) + q
             drop_text = f"📦 {q} шт. Summer Case"
         else:
             amt = random.choice([100000, 500000, 1000000])
-            data["money"] += amt
+            user_data["balance"] += amt
             drop_text = f"💸 {amt:,}$"
     elif case_id == "money_case":
         amt = 1000000 if roll < 0.20 else (500000 if roll < 0.45 else (300000 if roll < 0.60 else (200000 if roll < 0.70 else 100000)))
-        data["money"] += amt
+        user_data["balance"] += amt
         drop_text = f"💸 {amt:,}$"
     elif case_id == "loot_stash":
         if roll < 0.05:
             if total_limit_roles_given < MAX_LIMIT_ROLES:
-                data["has_role"] = True
+                user_data["has_role"] = True
                 total_limit_roles_given += 1
                 drop_text = f"👑 Лимитированная роль ({total_limit_roles_given}/{MAX_LIMIT_ROLES})"
             else:
-                data["money"] += 1000000
+                user_data["balance"] += 1000000
                 drop_text = "💸 Лимит ролей исчерпан! Бонус 1,000,000$"
         elif roll < 0.15:
-            data["has_custom_role"] = True
+            user_data["has_custom_role"] = True
             drop_text = "✨ Кастомная роль"
         else:
             amt = random.choice([250000, 750000])
-            data["money"] += amt
+            user_data["balance"] += amt
             drop_text = f"💸 {amt:,}$"
     elif case_id == "common":
         if roll < 0.25:
-            data["cases"]["summer"] = data["cases"].get("summer", 0) + 1
+            user_data["cases"]["summer"] = user_data["cases"].get("summer", 0) + 1
             drop_text = "📦 1 Summer Case"
         else:
-            data["money"] += 500000
+            user_data["balance"] += 500000
             drop_text = "💸 500,000$"
     elif case_id == "summer":
         if roll < 0.01:
             if total_limit_roles_2_given < LIMIT_ROLE_2_MAX:
-                data["has_role_2"] = True
+                user_data["has_role_2"] = True
                 total_limit_roles_2_given += 1
                 drop_text = "👑 Лимитированная роль (используй !title use)"
             else:
                 amount = 1000000
-                data["money"] += amount
+                user_data["balance"] += amount
                 drop_text = f"💸 Роль закончилась! Вам начислено {amount:,}$ бонусом"
         else:
             amount = random.choice([100000, 250000, 500000, 800000, 1000000])
-            data["money"] += amount
+            user_data["balance"] += amount
             drop_text = f"💸 {amount:,}$"
 
-    save_user(uid, data)
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=4)
+    
     emb = discord.Embed(title=f"Поздравляем! Ваш дроп за открытие {case_id} 💼:", color=discord.Color.green())
     emb.description = f"• Открытие кейсов пользователя {ctx.author.name}\n\n• {drop_text}"
-    emb.add_field(name="💰 Текущий баланс", value=f"{data['money']:,}$", inline=False)
+    emb.add_field(name="💰 Текущий баланс", value=f"{user_data['balance']:,}$", inline=False)
     emb.set_footer(text=f"彡★❄️★彡 | R1: {total_limit_roles_given}/{MAX_LIMIT_ROLES} | R2: {total_limit_roles_2_given}/{LIMIT_ROLE_2_MAX}")
-    await ctx
+    await ctx.send(embed=emb)
 
 @client.command(name="title")
 async def title(ctx, action: str):
