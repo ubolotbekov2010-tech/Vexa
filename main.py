@@ -1665,7 +1665,7 @@ async def info(ctx, name: str):
 @case.command(name="inventory")
 async def case_inventory(ctx):
     file_path = "economy.json"
-    with open(file_path, "r") as f:
+    with open(file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     guild_id = str(ctx.guild.id)
@@ -1704,10 +1704,33 @@ LIMIT_ROLE_2_MAX = 100
 total_limit_roles_given = 0
 total_limit_roles_2_given = 0
 
+def get_user(user_id):
+    if not os.path.exists("economy.json"):
+        with open("economy.json", "w") as f: json.dump({}, f)
+    with open("economy.json", "r") as f:
+        data = json.load(f)
+    uid = str(user_id)
+    if uid not in data:
+        data[uid] = {"money": 100000000, "cases": {}}
+        with open("economy.json", "w") as f: json.dump(data, f, indent=4)
+    return data[uid]
+
+def save_user(user_id, user_data):
+    with open("economy.json", "r") as f:
+        all_data = json.load(f)
+    all_data[str(user_id)] = user_data
+    with open("economy.json", "w") as f:
+        json.dump(all_data, f, indent=4)
+
+@client.group(name="case")
+async def case(ctx):
+    pass
+
 @case.command(name="open")
 async def open_case(ctx, case_id: str):
     global total_limit_roles_given, total_limit_roles_2_given
-    data = get_user(ctx.author.id)
+    uid = ctx.author.id
+    data = get_user(uid)
     
     if data["cases"].get(case_id, 0) <= 0:
         await ctx.send("❌ У тебя нет такого кейса!")
@@ -1716,7 +1739,7 @@ async def open_case(ctx, case_id: str):
     data["cases"][case_id] -= 1
     roll = random.random()
     drop_text = ""
-
+    
     if case_id == "caseception":
         sub_roll = random.random()
         if sub_roll < 0.25:
@@ -1735,12 +1758,10 @@ async def open_case(ctx, case_id: str):
             amt = random.choice([100000, 500000, 1000000])
             data["money"] += amt
             drop_text = f"💸 {amt:,}$"
-
     elif case_id == "money_case":
         amt = 1000000 if roll < 0.20 else (500000 if roll < 0.45 else (300000 if roll < 0.60 else (200000 if roll < 0.70 else 100000)))
         data["money"] += amt
         drop_text = f"💸 {amt:,}$"
-    
     elif case_id == "loot_stash":
         if roll < 0.05:
             if total_limit_roles_given < MAX_LIMIT_ROLES:
@@ -1757,7 +1778,6 @@ async def open_case(ctx, case_id: str):
             amt = random.choice([250000, 750000])
             data["money"] += amt
             drop_text = f"💸 {amt:,}$"
-
     elif case_id == "common":
         if roll < 0.25:
             data["cases"]["summer"] = data["cases"].get("summer", 0) + 1
@@ -1765,7 +1785,6 @@ async def open_case(ctx, case_id: str):
         else:
             data["money"] += 500000
             drop_text = "💸 500,000$"
-    
     elif case_id == "summer":
         if roll < 0.01:
             if total_limit_roles_2_given < LIMIT_ROLE_2_MAX:
@@ -1781,15 +1800,12 @@ async def open_case(ctx, case_id: str):
             data["money"] += amount
             drop_text = f"💸 {amount:,}$"
 
+    save_user(uid, data)
     emb = discord.Embed(title=f"Поздравляем! Ваш дроп за открытие {case_id} 💼:", color=discord.Color.green())
     emb.description = f"• Открытие кейсов пользователя {ctx.author.name}\n\n• {drop_text}"
     emb.add_field(name="💰 Текущий баланс", value=f"{data['money']:,}$", inline=False)
     emb.set_footer(text=f"彡★❄️★彡 | R1: {total_limit_roles_given}/{MAX_LIMIT_ROLES} | R2: {total_limit_roles_2_given}/{LIMIT_ROLE_2_MAX}")
-    await ctx.send(embed=emb)
-
-    inventory_cmd = ctx.bot.get_command("case").get_command("inventory")
-    if inventory_cmd:
-        await ctx.invoke(inventory_cmd)
+    await ctx
 
 @client.command(name="title")
 async def title(ctx, action: str):
@@ -1876,12 +1892,16 @@ def get_user(uid):
 
 @client.group(name="shop", invoke_without_command=True)
 async def shop(ctx):
-    await ctx.send("Используй `!shop buy common` для покупки.")
+    embed = discord.Embed(title="🛒 Магазин", color=discord.Color.purple())
+    embed.add_field(name="Common case", value="Цена: 1,000,000\nКоманда: !shop buy common <кол-во>", inline=False)
+    embed.add_field(name="Loot Stash", value="Цена: 5,000,000\nКоманда: !shop buy loot_stash <кол-во>", inline=False)
+    embed.set_footer(text="Владельцам роли Loot Stash скидка 25%!")
+    await ctx.send(embed=embed)
 
 @shop.command(name="buy")
 async def shop_buy(ctx, case_name: str, amount: int = 1):
     file_path = "economy.json"
-    with open(file_path, "r") as f:
+    with open(file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     guild_id = str(ctx.guild.id)
@@ -1906,7 +1926,7 @@ async def shop_buy(ctx, case_name: str, amount: int = 1):
 
     price = prices[case_name]
     
-    if SUNSET_ROLE_ID in [r.id for r in ctx.author.roles]:
+    if ROLE_SUMMER_LIMIT_ID in [r.id for r in ctx.author.roles]:
         price = int(price * 0.75)
         
     total_cost = price * amount
@@ -1915,7 +1935,7 @@ async def shop_buy(ctx, case_name: str, amount: int = 1):
         user_data["balance"] -= total_cost
         user_data["cases"][case_name] = user_data["cases"].get(case_name, 0) + amount
         
-        with open(file_path, "w") as f:
+        with open(file_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4)
             
         await ctx.send(f"✅ Куплено {amount} шт. {case_name} за {total_cost:,}$!")
