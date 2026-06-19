@@ -2102,7 +2102,7 @@ class ApplicationModal(discord.ui.Modal):
             overwrites[curator] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
         if manager:
             overwrites[manager] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
-
+        
         ticket_channel = await guild.create_text_channel(f"заявка-{interaction.user.name}", category=category, overwrites=overwrites)
         
         embed = discord.Embed(title=f"Новая заявка на должность: {self.position}", color=discord.Color.blue())
@@ -2116,7 +2116,7 @@ class ApplicationModal(discord.ui.Modal):
         )
         
         await interaction.response.send_message(f"✅ Ваша заявка отправлена в {ticket_channel.mention}", ephemeral=True)
-
+        
 class PositionSelect(discord.ui.Select):
     def __init__(self):
         options = [
