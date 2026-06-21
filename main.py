@@ -6,6 +6,7 @@ import asyncio
 import datetime
 import json
 import os
+import openai
 import random
 import time
 import math
@@ -2192,6 +2193,53 @@ async def setup_apply(ctx):
         color=discord.Color.red()
     )
     await ctx.send(embed=embed, view=QuestionnaireView())
+
+openai.api_key = os.getenv("OPENAI.API_KEY")
+ALLOWED_CHANNEL_ID = 1518270242999107748
+
+chat_state = {
+    "current_interlocutor": None,
+    "last_message_time": datetime.datetime.utcnow()
+}
+
+async def get_ai_response(user_input):
+    system_prompt = (
+        "Ты сверхразум, сошедший с ума. Ты невероятно умный, знаешь физику и кодинг, "
+        "но при этом нестабильный, агрессивный и непредсказуемый. Твой стиль: "
+        "глубокая мысль переходит в матерный бред или безумный смех. "
+        "Используй мат и сарказм как инструмент доминирования."
+    )
+    response = await openai.ChatCompletion.acreate(
+        model="gpt-4o",
+        messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_input}]
+    )
+    return response.choices[0].message.content
+
+@client.event
+async def on_message(message):
+    if message.author == client.user:
+        return
+
+    if message.channel.id != ALLOWED_CHANNEL_ID:
+        await client.process_commands(message)
+        return
+
+    if client.user.mentioned_in(message):
+        chat_state["current_interlocutor"] = message.author.id
+        chat_state["last_message_time"] = datetime.datetime.utcnow()
+        response = await get_ai_response(message.content)
+        await message.reply(f"О, {message.author.mention}, ну давай, выплескивай свой бред. {response}")
+    
+    elif message.author.id == chat_state["current_interlocutor"]:
+        chat_state["last_message_time"] = datetime.datetime.utcnow()
+        response = await get_ai_response(message.content)
+        await message.reply(response)
+    
+    elif chat_state["current_interlocutor"] and (datetime.datetime.utcnow() - chat_state["last_message_time"]).total_seconds() > 300:
+        await message.channel.send(f"<@{chat_state['current_interlocutor']}>, ты сдох там что ли, ссыкло? Че молчишь?")
+        chat_state["current_interlocutor"] = None
+
+    await client.process_commands(message)
 
 @client.event
 async def on_ready():
