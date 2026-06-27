@@ -2255,7 +2255,6 @@ CREATE_COST = 3_000_000_000
 
 @client.group(invoke_without_command=True)
 async def clan(ctx):
-    """Группа команд для управления кланами."""
     if ctx.invoked_subcommand is None:
         embed = discord.Embed(
             title="🛡️ Система кланов Vexa",
