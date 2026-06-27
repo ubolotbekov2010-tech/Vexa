@@ -6,12 +6,16 @@ import asyncio
 import datetime
 import json
 import os
+import aiosqlite
 import openai
 import random
 import time
 import math
 from dotenv import load_dotenv
 from openai import AsyncOpenAI
+
+pending_invites = {}
+pending_actions = {}
 
 LOG_CHANNEL_ID = 1514982915921150083
 MUTE_ROLE_ID = 1514982507014131828
@@ -2244,6 +2248,513 @@ async def on_message(message):
         chat_state["current_interlocutor"] = None
 
     await client.process_commands(message)
+
+
+LEADER_ROLE_ID = 1500942307111997502
+CREATE_COST = 3_000_000_000
+
+@client.group(invoke_without_command=True)
+async def clan(ctx):
+    """Группа команд для управления кланами."""
+    if ctx.invoked_subcommand is None:
+        embed = discord.Embed(
+            title="🛡️ Система кланов Vexa",
+            description="Используйте `!clan` с одной из команд:\n\n"
+                        "**Основные:** `create`, `menu`, `list`\n"
+                        "**Управление:** `invite`, `accept`, `reject`, `leave`, `kick`, `promote`, `demote`\n"
+                        "**Экономика:** `balance`, `deposit`, `withdraw`, `raid`\n"
+                        "**Союзы:** `send_union`, `accept_union`, `deny_union`",
+            color=discord.Color.blue()
+        )
+        await ctx.send(embed=embed)
+
+def get_user_balance(user_id):
+    if not os.path.exists("economy.json"): return 0
+    with open("economy.json", "r") as f:
+        try:
+            data = json.load(f)
+            return data.get(str(user_id), {}).get("balance", 0)
+        except: return 0
+
+def update_user_balance(user_id, amount):
+    if not os.path.exists("economy.json"): return
+    with open("economy.json", "r") as f:
+        data = json.load(f)
+    
+    if str(user_id) not in data:
+        data[str(user_id)] = {"balance": 0}
+        
+    data[str(user_id)]["balance"] += amount
+    
+    with open("economy.json", "w") as f:
+        json.dump(data, f, indent=4)
+
+@clan.command(name="create")
+async def create(ctx, *, name: str):
+    """Создание нового клана."""
+    
+    async with aiosqlite.connect("clans.db") as db:
+        cursor = await db.execute("SELECT clan_name FROM members WHERE user_id = ?", (ctx.author.id,))
+        if await cursor.fetchone():
+            return await ctx.send("❌ **Ошибка:** Вы уже состоите в клане. Сначала покиньте старый.")
+
+        current_bal = get_user_balance(ctx.author.id) 
+        if current_bal < CREATE_COST:
+            return await ctx.send(f"❌ **Недостаточно средств!**\nДля создания клана нужно **{CREATE_COST:,}** валюты.\nВаш баланс: **{current_bal:,}**.")
+
+        try:
+            clan_role = await ctx.guild.create_role(
+                name=name, 
+                reason=f"Создание клана: {ctx.author}"
+            )
+            
+            leader_role = ctx.guild.get_role(LEADER_ROLE_ID)
+            
+            roles_to_add = [clan_role]
+            if leader_role:
+                roles_to_add.append(leader_role)
+            
+            await ctx.author.add_roles(*roles_to_add)
+            
+        except discord.Forbidden:
+            return await ctx.send("❌ **Ошибка:** У бота нет прав для создания ролей.")
+
+        update_user_balance(ctx.author.id, -CREATE_COST)
+
+        await db.execute(
+            "INSERT INTO clans (name, owner_id, balance, level, description, role_id) VALUES (?, ?, ?, ?, ?, ?)",
+            (name, ctx.author.id, 0, 1, "Нет описания", clan_role.id)
+        )
+        await db.execute(
+            "INSERT INTO members (user_id, clan_name, rank) VALUES (?, ?, ?)",
+            (ctx.author.id, name, "Владелец")
+        )
+        await db.commit()
+
+    embed = discord.Embed(
+        title="🏆 Клан успешно создан!",
+        description=f"Поздравляю, **{ctx.author.mention}**!\n\n"
+                    f"Клан **{name}** основан.\n"
+                    f"Списано: **{CREATE_COST:,}** валюты.\n\n"
+                    f"Вам выданы роли: **{name}** и **Глава клана**.",
+        color=discord.Color.gold()
+    )
+    embed.set_thumbnail(url=ctx.author.display_avatar.url)
+    embed.set_footer(text="Используйте !clan invite для приглашения участников!")
+    
+    await ctx.send(embed=embed)
+
+@clan.command(name="menu")
+async def menu(ctx):
+    
+    async with aiosqlite.connect("clans.db") as db:
+        cursor = await db.execute("SELECT clan_name, rank FROM members WHERE user_id = ?", (ctx.author.id,))
+        member_data = await cursor.fetchone()
+        
+        if not member_data:
+            return await ctx.send("❌ **Ошибка:** Вы не состоите в клане!")
+        
+        clan_name, user_rank = member_data
+        msg = await ctx.send("⏳ Загрузка данных...")
+        
+        for _ in range(20): 
+            clan_cur = await db.execute(
+                "SELECT owner_id, balance, level, xp, description, treasury_lvl, members_lvl FROM clans WHERE name = ?", 
+                (clan_name,)
+            )
+            clan_data = await clan_cur.fetchone()
+            
+            # Считаем участников
+            count_cur = await db.execute("SELECT COUNT(*) FROM members WHERE clan_name = ?", (clan_name,))
+            member_count = (await count_cur.fetchone())[0]
+            
+            if not clan_data:
+                await msg.edit(content="⚠️ **Внимание:** Клан был расформирован.", embed=None)
+                break
+
+            owner_id, balance, level, xp, description, t_lvl, m_lvl = clan_data
+            
+            max_members = 10 + (m_lvl - 1) * 10
+            max_balance = 25_000_000 + (t_lvl - 1) * 25_000_000
+            xp_needed = 500 + (level - 1) * 250
+            
+            content = (
+                f"🛡️ **Клан:** {clan_name}\n"
+                f"👥 **Участники:** {member_count}/{max_members}\n"
+                f"💰 **Баланс:** {balance:,}$ / {max_balance:,}$\n"
+                f"📈 **Уровень:** {level} ({xp}/{xp_needed} XP)\n"
+                f"🎖️ **Ваш статус:** {user_rank}\n"
+                f"👑 **Владелец:** <@{owner_id}>\n"
+                f"🚫 **Описание:** {description}"
+            )
+            
+            embed = discord.Embed(description=content, color=discord.Color.dark_grey())
+            embed.set_footer(text="Система кланов | Обновляется каждые 3 сек...")
+            
+            await msg.edit(content=None, embed=embed)
+            await asyncio.sleep(3)
+
+@clan.command(name="up")
+async def up(ctx):
+    xp_gain = random.randint(50, 100)
+    
+    async with aiosqlite.connect("clans.db") as db:
+        cur = await db.execute("SELECT clan_name FROM members WHERE user_id = ?", (ctx.author.id,))
+        member = await cur.fetchone()
+        if not member: return await ctx.send("❌ Вы не в клане.")
+        
+        clan_name = member[0]
+        cur = await db.execute("SELECT level, xp FROM clans WHERE name = ?", (clan_name,))
+        level, current_xp = await cur.fetchone()
+        
+        if level >= 25:
+            return await ctx.send("✅ Ваш клан уже достиг максимального 25 уровня!")
+
+        xp_needed = 500 + (level - 1) * 250
+        new_xp = current_xp + xp_gain
+        
+        if new_xp >= xp_needed:
+            level += 1
+            new_xp = 0
+            await db.execute("UPDATE clans SET level = ?, xp = ? WHERE name = ?", (level, new_xp, clan_name))
+            await ctx.send(f"🎉 Поздравляю! Клан **{clan_name}** достиг **{level}** уровня! (+{xp_gain} XP)")
+        else:
+            await db.execute("UPDATE clans SET xp = ? WHERE name = ?", (new_xp, clan_name))
+            await ctx.send(f"📈 Вы заработали **{xp_gain} XP** для клана. Прогресс: **{new_xp}/{xp_needed}**")
+        
+        await db.commit()
+
+@clan.command(name="upgrades")
+async def upgrades(ctx):
+    async with aiosqlite.connect("clans.db") as db:
+        cur = await db.execute("SELECT treasury_lvl, members_lvl FROM clans WHERE owner_id = ?", (ctx.author.id,))
+        data = await cur.fetchone()
+        if not data: return await ctx.send("❌ У вас нет клана.")
+        
+        t_lvl, m_lvl = data
+        
+        t_cost = t_lvl * 100_000_000
+        m_cost = m_lvl * 100_000_000
+        
+        embed = discord.Embed(title="🛒 Магазин улучшений клана", color=discord.Color.green())
+        embed.add_field(name="1. Казна (Treasury)", value=f"Ур: {t_lvl} -> {t_lvl+1}\nЦена: {t_cost:,}$", inline=False)
+        embed.add_field(name="2. Участники (Members)", value=f"Ур: {m_lvl} -> {m_lvl+1}\nЦена: {m_cost:,}$", inline=False)
+        embed.set_footer(text="Используйте !clan buy <1-2> для покупки")
+        await ctx.send(embed=embed)
+
+@clan.command(name="buy")
+async def buy(ctx, upgrade_type: int):
+    if upgrade_type not in [1, 2]:
+        return await ctx.send("❌ Выберите 1 (Казна) или 2 (Участники).")
+
+    async with aiosqlite.connect("clans.db") as db:
+        cur = await db.execute("SELECT balance, treasury_lvl, members_lvl FROM clans WHERE owner_id = ?", (ctx.author.id,))
+        data = await cur.fetchone()
+        if not data: return await ctx.send("❌ Вы не владелец клана.")
+        
+        balance, t_lvl, m_lvl = data
+        
+        if upgrade_type == 1:
+            if t_lvl >= 20: return await ctx.send("❌ Максимальный уровень казны!")
+            cost = t_lvl * 100_000_000
+            if balance < cost: return await ctx.send(f"❌ Недостаточно средств в казне! Нужно {cost:,}$.")
+            await db.execute("UPDATE clans SET balance = balance - ?, treasury_lvl = treasury_lvl + 1 WHERE owner_id = ?", (cost, ctx.author.id))
+            await ctx.send(f"✅ Улучшение казны до {t_lvl+1} уровня успешно!")
+            
+        elif upgrade_type == 2:
+            if m_lvl >= 20: return await ctx.send("❌ Максимальный уровень участников!")
+            cost = m_lvl * 100_000_000
+            if balance < cost: return await ctx.send(f"❌ Недостаточно средств в казне! Нужно {cost:,}$.")
+            await db.execute("UPDATE clans SET balance = balance - ?, members_lvl = members_lvl + 1 WHERE owner_id = ?", (cost, ctx.author.id))
+            await ctx.send(f"✅ Вместимость клана увеличена до уровня {m_lvl+1}!")
+            
+        await db.commit()
+
+@clan.command(name="deposit")
+async def deposit(ctx, amount: int):
+    if amount <= 0: return await ctx.send("❌ Сумма должна быть больше 0!")
+
+    async with aiosqlite.connect("clans.db") as db:
+        cur = await db.execute("SELECT clan_name, balance, treasury_lvl FROM clans JOIN members ON clans.name = members.clan_name WHERE members.user_id = ?", (ctx.author.id,))
+        clan_data = await cur.fetchone()
+        if not clan_data: return await ctx.send("❌ Вы не в клане.")
+        
+        clan_name, current_balance, t_lvl = clan_data
+        
+        max_limit = 25_000_000 + (t_lvl - 1) * 25_000_000
+        
+        if current_balance + amount > max_limit:
+            return await ctx.send(f"❌ **Лимит превышен!**\nВаш текущий лимит казны: **{max_limit:,}$**.\nПрокачайте уровень казны, чтобы хранить больше!")
+
+        user_bal = get_user_balance(ctx.author.id)
+        if user_bal < amount:
+            return await ctx.send("❌ У вас недостаточно денег на руках.")
+
+        await db.execute("UPDATE clans SET balance = balance + ? WHERE name = ?", (amount, clan_name))
+        await db.commit()
+        
+    update_user_balance(ctx.author.id, -amount)
+    await ctx.send(f"💰 В казну клана **{clan_name}** внесено **{amount:,}$**.")
+
+@clan.command(name="withdraw")
+async def withdraw(ctx, amount: int):
+    if amount <= 0: return await ctx.send("❌ Сумма должна быть больше 0!")
+    
+    async with aiosqlite.connect("clans.db") as db:
+        cur = await db.execute("SELECT clans.name, clans.balance FROM clans JOIN members ON clans.name = members.clan_name WHERE members.user_id = ? AND members.rank = ?", (ctx.author.id, "Владелец"))
+        data = await cur.fetchone()
+        
+        if not data: return await ctx.send("❌ Только Владелец может снимать средства.")
+        
+        clan_name, clan_balance = data
+        
+        if clan_balance < amount:
+            return await ctx.send(f"❌ В казне недостаточно средств! Доступно: {clan_balance:,}$")
+
+        await db.execute("UPDATE clans SET balance = balance - ? WHERE name = ?", (amount, clan_name))
+        await db.commit()
+
+    update_user_balance(ctx.author.id, amount)
+    await ctx.send(f"💸 Владелец снял **{amount:,}$** из казны.")
+
+@clan.command(name="invite")
+async def invite(ctx, member: discord.Member):
+    if member.id == ctx.author.id:
+        return await ctx.send("❌ Вы не можете пригласить себя.")
+
+    async with aiosqlite.connect("clans.db") as db:
+        cur = await db.execute("SELECT clan_name, rank FROM members WHERE user_id = ?", (ctx.author.id,))
+        inviter = await cur.fetchone()
+        
+        if not inviter or inviter[1] not in ["Владелец", "Со-Владелец"]:
+            return await ctx.send("❌ У вас нет прав для приглашения.")
+
+        cur = await db.execute("SELECT clan_name FROM members WHERE user_id = ?", (member.id,))
+        if await cur.fetchone():
+            return await ctx.send("❌ Игрок уже состоит в клане.")
+
+        pending_invites[member.id] = {
+            "clan": inviter[0],
+            "expire": time.time() + 300 
+        }
+        
+        await ctx.send(f"📩 {ctx.author.mention} пригласил {member.mention} в клан **{inviter[0]}**. Принять: `!clan accept`, отклонить: `!clan reject`.")
+
+@clan.command(name="accept")
+async def accept(ctx):
+    invite = pending_invites.get(ctx.author.id)
+    if not invite or time.time() > invite["expire"]:
+        if ctx.author.id in pending_invites: del pending_invites[ctx.author.id]
+        return await ctx.send("❌ У вас нет активных приглашений.")
+
+    clan_name = invite["clan"]
+
+    async with aiosqlite.connect("clans.db") as db:
+        await db.execute("INSERT INTO members (user_id, clan_name, rank) VALUES (?, ?, ?)", 
+                         (ctx.author.id, clan_name, "Участник"))
+        
+        cur = await db.execute("SELECT role_id FROM clans WHERE name = ?", (clan_name,))
+        row = await cur.fetchone()
+        if row:
+            role = ctx.guild.get_role(row[0])
+            if role: await ctx.author.add_roles(role)
+        
+        await db.commit()
+
+    del pending_invites[ctx.author.id]
+    await ctx.send(f"✅ Вы вступили в клан **{clan_name}**!")
+
+@clan.command(name="reject")
+async def reject(ctx):
+    if ctx.author.id in pending_invites:
+        del pending_invites[ctx.author.id]
+        await ctx.send("✅ Вы отклонили приглашение.")
+    else:
+        await ctx.send("❌ У вас нет активных приглашений.")
+
+@clan.command(name="leave")
+async def leave(ctx):
+    async with aiosqlite.connect("clans.db") as db:
+        cur = await db.execute("SELECT clan_name, rank FROM members WHERE user_id = ?", (ctx.author.id,))
+        member = await cur.fetchone()
+        if not member: return await ctx.send("❌ Вы не в клане.")
+        
+        clan_name, rank = member
+
+        if rank == "Глава":
+            if pending_actions.get(ctx.author.id) == "leave":
+                cur = await db.execute("SELECT user_id FROM members WHERE clan_name = ? AND rank = 'Со-Владелец'", (clan_name,))
+                co_owner = await cur.fetchone()
+                
+                if co_owner:
+                    await db.execute("UPDATE members SET rank = 'Глава' WHERE user_id = ?", (co_owner[0],))
+                    await db.execute("DELETE FROM members WHERE user_id = ?", (ctx.author.id,))
+                    await ctx.send(f"👑 Пост Главы передан игроку <@{co_owner[0]}>. Вы покинули клан.")
+                else:
+                    await ctx.send("⚠️ В клане нет Со-Владельца для передачи прав!")
+                del pending_actions[ctx.author.id]
+            else:
+                pending_actions[ctx.author.id] = "leave"
+                return await ctx.send("⚠️ **Вы — Глава.** Если вы выйдете, пост перейдет Со-Владельцу. Напишите `!clan leave` еще раз для подтверждения.")
+
+        else:
+            await db.execute("DELETE FROM members WHERE user_id = ?", (ctx.author.id,))
+            await ctx.send("👋 Вы покинули клан.")
+        
+        await db.commit()
+
+@clan.command(name="kick")
+async def kick(ctx, member: discord.Member):
+    """Исключает участника из клана (доступно Главе, Маршалу, Лорду)."""
+    
+    async with aiosqlite.connect("clans.db") as db:
+        cur = await db.execute("SELECT clan_name, rank FROM members WHERE user_id = ?", (ctx.author.id,))
+        author_data = await cur.fetchone()
+        
+        cur = await db.execute("SELECT clan_name, rank FROM members WHERE user_id = ?", (member.id,))
+        target_data = await cur.fetchone()
+        
+        if not author_data: return await ctx.send("❌ Вы не в клане.")
+        if not target_data or author_data[0] != target_data[0]:
+            return await ctx.send("❌ Этот игрок не состоит в вашем клане.")
+            
+        if author_data[1] not in ["Глава", "Маршал", "Лорд"]:
+            return await ctx.send("❌ Недостаточно прав! Нужен ранг Лорд и выше.")
+            
+        if target_data[1] == "Глава":
+            return await ctx.send("❌ Вы не можете выгнать Главу клана!")
+            
+        rank_order = {"Глава": 4, "Маршал": 3, "Лорд": 2, "Инквизитор": 1, "Пехотинец": 0}
+        if rank_order[author_data[1]] <= rank_order[target_data[1]]:
+            return await ctx.send("❌ Вы не можете выгнать игрока с таким же или более высоким рангом!")
+            
+        await db.execute("DELETE FROM members WHERE user_id = ?", (member.id,))
+        await db.commit()
+        
+        await ctx.send(f"👢 Игрок {member.mention} был исключен из клана.")
+
+@clan.command(name="delete")
+async def delete(ctx):
+    
+    async with aiosqlite.connect("clans.db") as db:
+        cur = await db.execute("SELECT clan_name, rank FROM members WHERE user_id = ?", (ctx.author.id,))
+        member_data = await cur.fetchone()
+        
+        if not member_data:
+            return await ctx.send("❌ Вы не состоите в клане.")
+        
+        clan_name, rank = member_data
+        
+        if rank != "Глава":
+            return await ctx.send("❌ Только **Глава** может удалить клан!")
+
+        if pending_actions.get(ctx.author.id) == "delete":
+            await db.execute("DELETE FROM clans WHERE name = ?", (clan_name,))
+            await db.execute("DELETE FROM members WHERE clan_name = ?", (clan_name,))
+            await db.commit()
+            
+            await ctx.send(f"🗑️ Клан **{clan_name}** был полностью удален.")
+            del pending_actions[ctx.author.id]
+        else:
+            pending_actions[ctx.author.id] = "delete"
+            await ctx.send("⚠️ **Внимание:** Это удалит клан навсегда и всех участников! Напишите `!clan delete` еще раз для подтверждения.")
+
+@clan.command(name="members")
+async def members(ctx):
+    async with aiosqlite.connect("clans.db") as db:
+        cur = await db.execute("SELECT clan_name FROM members WHERE user_id = ?", (ctx.author.id,))
+        clan = await cur.fetchone()
+        if not clan: return await ctx.send("❌ Вы не в клане.")
+        clan_name = clan[0]
+
+        ranks = ["Глава", "Маршал", "Лорд", "Инквизитор", "Пехотинец"]
+        
+        embed = discord.Embed(title=f"Участники клана «{clan_name}»", color=discord.Color.blue())
+        
+        for rank in ranks:
+            cur = await db.execute("SELECT user_id FROM members WHERE clan_name = ? AND rank = ?", (clan_name, rank))
+            users = await cur.fetchall()
+            if users:
+                user_list = "\n".join([f"<@{u[0]}>" for u in users])
+                embed.add_field(name=f"{rank}:", value=user_list, inline=False)
+        
+        await ctx.send(embed=embed)
+
+@clan.command(name="promote")
+async def promote(ctx, member: discord.Member):
+    rank_order = {"Глава": 4, "Маршал": 3, "Лорд": 2, "Инквизитор": 1, "Пехотинец": 0}
+    
+    async with aiosqlite.connect("clans.db") as db:
+        cur = await db.execute("SELECT rank FROM members WHERE user_id = ?", (ctx.author.id,))
+        author_rank = (await cur.fetchone())[0]
+        cur = await db.execute("SELECT rank FROM members WHERE user_id = ?", (member.id,))
+        target_rank = (await cur.fetchone())[0]
+
+        if author_rank not in ["Глава", "Маршал"]:
+            return await ctx.send("❌ Только Глава и Маршал могут повышать участников.")
+        
+        if target_rank == "Инквизитор": next_rank = "Лорд"
+        elif target_rank == "Лорд": next_rank = "Маршал"
+        elif target_rank == "Пехотинец": next_rank = "Инквизитор"
+        else: return await ctx.send("❌ Выше этого ранга повысить нельзя.")
+
+        await db.execute("UPDATE members SET rank = ? WHERE user_id = ?", (next_rank, member.id))
+        await db.commit()
+        await ctx.send(f"✅ Участник {member.mention} повышен до ранга **{next_rank}**!")
+
+@clan.command(name="demote")
+async def demote(ctx, member: discord.Member):
+    rank_order = {"Глава": 4, "Маршал": 3, "Лорд": 2, "Инквизитор": 1, "Пехотинец": 0}
+    
+    async with aiosqlite.connect("clans.db") as db:
+        cur = await db.execute("SELECT rank FROM members WHERE user_id = ?", (ctx.author.id,))
+        author_rank = (await cur.fetchone())[0]
+        cur = await db.execute("SELECT rank FROM members WHERE user_id = ?", (member.id,))
+        target_rank = (await cur.fetchone())[0]
+
+        if author_rank not in ["Глава", "Маршал"]:
+            return await ctx.send("❌ Только Глава и Маршал могут понижать участников.")
+        
+        if rank_order[author_rank] <= rank_order[target_rank]:
+            return await ctx.send("❌ Вы не можете понизить участника с таким же или более высоким рангом.")
+
+        if target_rank == "Маршал": new_rank = "Лорд"
+        elif target_rank == "Лорд": new_rank = "Инквизитор"
+        elif target_rank == "Инквизитор": new_rank = "Пехотинец"
+        else: return await ctx.send("❌ Этот участник уже имеет минимальный ранг.")
+
+        await db.execute("UPDATE members SET rank = ? WHERE user_id = ?", (new_rank, member.id))
+        await db.commit()
+        await ctx.send(f"📉 Участник {member.mention} понижен до ранга **{new_rank}**.")
+
+@clan.command(name="list")
+async def list_clans(ctx):
+    
+    msg = await ctx.send("⏳ Загрузка рейтинга кланов...")
+
+    for _ in range(20):
+        async with aiosqlite.connect("clans.db") as db:
+            cur = await db.execute("SELECT name, level, xp FROM clans ORDER BY level DESC, xp DESC LIMIT 10")
+            clans = await cur.fetchall()
+            
+            if not clans:
+                await msg.edit(content="❌ В базе данных пока нет кланов.")
+                break
+
+            embed = discord.Embed(title="🏆 Топ кланов Warface", color=discord.Color.gold())
+            
+            for i, (name, lvl, xp) in enumerate(clans, 1):
+                xp_needed = 500 + (lvl - 1) * 250
+                embed.add_field(
+                    name=f"{i}. {name}", 
+                    value=f"Уровень: {lvl} | Прогресс: {xp}/{xp_needed} XP", 
+                    inline=False
+                )
+            
+            embed.set_footer(text="🔄 Автообновление каждые 3 сек...")
+            await msg.edit(content=None, embed=embed)
+            
+            await asyncio.sleep(3)
 
 @client.event
 async def on_ready():
