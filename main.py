@@ -2778,8 +2778,35 @@ async def on_ready():
     print(f"Bot {client.user} is ready!")
     
     async with aiosqlite.connect("clans.db") as db:
-        await db.execute("CREATE TABLE IF NOT EXISTS clans (name TEXT PRIMARY KEY, level INTEGER, xp INTEGER)")
-        await db.execute("CREATE TABLE IF NOT EXISTS members (user_id INTEGER, clan_name TEXT, rank TEXT)")
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS clans (
+                name TEXT PRIMARY KEY,
+                level INTEGER DEFAULT 1,
+                xp INTEGER DEFAULT 0
+            )
+        """)
+        
+        columns = [
+            "owner_id INTEGER", 
+            "balance INTEGER DEFAULT 0", 
+            "description TEXT DEFAULT 'Нет описания'", 
+            "role_id INTEGER", 
+            "treasury_lvl INTEGER DEFAULT 1"
+        ]
+        
+        for col in columns:
+            try:
+                await db.execute(f"ALTER TABLE clans ADD COLUMN {col}")
+            except:
+                pass 
+                
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS members (
+                user_id INTEGER, 
+                clan_name TEXT, 
+                rank TEXT
+            )
+        """)
         await db.commit()
     
     if not payout_loop.is_running():
