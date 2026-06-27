@@ -2597,27 +2597,33 @@ async def leave(ctx):
         
         clan_name, rank = member
 
-        if rank == "Глава":
+        if rank == "Владелец":
             if pending_actions.get(ctx.author.id) == "leave":
                 cur = await db.execute("SELECT user_id FROM members WHERE clan_name = ? AND rank = 'Со-Владелец'", (clan_name,))
                 co_owner = await cur.fetchone()
                 
                 if co_owner:
-                    await db.execute("UPDATE members SET rank = 'Глава' WHERE user_id = ?", (co_owner[0],))
+                    await db.execute("UPDATE members SET rank = 'Владелец' WHERE user_id = ?", (co_owner[0],))
                     await db.execute("DELETE FROM members WHERE user_id = ?", (ctx.author.id,))
-                    await ctx.send(f"👑 Пост Главы передан игроку <@{co_owner[0]}>. Вы покинули клан.")
+                    await ctx.send(f"👑 Пост Владельца передан игроку <@{co_owner[0]}>. Вы покинули клан.")
                 else:
                     await ctx.send("⚠️ В клане нет Со-Владельца для передачи прав!")
                 del pending_actions[ctx.author.id]
             else:
                 pending_actions[ctx.author.id] = "leave"
-                return await ctx.send("⚠️ **Вы — Глава.** Если вы выйдете, пост перейдет Со-Владельцу. Напишите `!clan leave` еще раз для подтверждения.")
-
+                return await ctx.send("⚠️ **Вы — Владелец.** Если вы выйдете, пост перейдет Со-Владельцу. Напишите `!clan leave` еще раз для подтверждения.")
         else:
             await db.execute("DELETE FROM members WHERE user_id = ?", (ctx.author.id,))
             await ctx.send("👋 Вы покинули клан.")
         
         await db.commit()
+
+    role = discord.utils.get(ctx.guild.roles, name=clan_name)
+    if role:
+        try:
+            await ctx.author.remove_roles(role)
+        except:
+            pass
 
 @clan.command(name="kick")
 async def kick(ctx, member: discord.Member):
