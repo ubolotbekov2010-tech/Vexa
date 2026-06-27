@@ -2291,7 +2291,6 @@ def update_user_balance(user_id, amount):
 
 @clan.command(name="create")
 async def create(ctx, *, name: str):
-    """Создание нового клана."""
     
     async with aiosqlite.connect("clans.db") as db:
         cursor = await db.execute("SELECT clan_name FROM members WHERE user_id = ?", (ctx.author.id,))
