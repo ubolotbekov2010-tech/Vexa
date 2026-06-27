@@ -2360,8 +2360,13 @@ async def create(ctx, *, name: str):
 
 @clan.command(name="menu")
 async def menu(ctx):
-    
     async with aiosqlite.connect("clans.db") as db:
+        try:
+            await db.execute("ALTER TABLE clans ADD COLUMN members_lvl INTEGER DEFAULT 1")
+            await db.commit()
+        except:
+            pass
+
         cursor = await db.execute("SELECT clan_name, rank FROM members WHERE user_id = ?", (ctx.author.id,))
         member_data = await cursor.fetchone()
         
@@ -2371,42 +2376,38 @@ async def menu(ctx):
         clan_name, user_rank = member_data
         msg = await ctx.send("⏳ Загрузка данных...")
         
-        for _ in range(20): 
-            clan_cur = await db.execute(
-                "SELECT owner_id, balance, level, xp, description, treasury_lvl, members_lvl FROM clans WHERE name = ?", 
-                (clan_name,)
-            )
-            clan_data = await clan_cur.fetchone()
-            
-            # Считаем участников
-            count_cur = await db.execute("SELECT COUNT(*) FROM members WHERE clan_name = ?", (clan_name,))
-            member_count = (await count_cur.fetchone())[0]
-            
-            if not clan_data:
-                await msg.edit(content="⚠️ **Внимание:** Клан был расформирован.", embed=None)
-                break
+        clan_cur = await db.execute(
+            "SELECT owner_id, balance, level, xp, description, treasury_lvl, members_lvl FROM clans WHERE name = ?", 
+            (clan_name,)
+        )
+        clan_data = await clan_cur.fetchone()
+        
+        count_cur = await db.execute("SELECT COUNT(*) FROM members WHERE clan_name = ?", (clan_name,))
+        member_count = (await count_cur.fetchone())[0]
+        
+        if not clan_data:
+            return await msg.edit(content="⚠️ **Внимание:** Клан был расформирован.", embed=None)
 
-            owner_id, balance, level, xp, description, t_lvl, m_lvl = clan_data
-            
-            max_members = 10 + (m_lvl - 1) * 10
-            max_balance = 25_000_000 + (t_lvl - 1) * 25_000_000
-            xp_needed = 500 + (level - 1) * 250
-            
-            content = (
-                f"🛡️ **Клан:** {clan_name}\n"
-                f"👥 **Участники:** {member_count}/{max_members}\n"
-                f"💰 **Баланс:** {balance:,}$ / {max_balance:,}$\n"
-                f"📈 **Уровень:** {level} ({xp}/{xp_needed} XP)\n"
-                f"🎖️ **Ваш статус:** {user_rank}\n"
-                f"👑 **Владелец:** <@{owner_id}>\n"
-                f"🚫 **Описание:** {description}"
-            )
-            
-            embed = discord.Embed(description=content, color=discord.Color.dark_grey())
-            embed.set_footer(text="Система кланов | Обновляется каждые 3 сек...")
-            
-            await msg.edit(content=None, embed=embed)
-            await asyncio.sleep(3)
+        owner_id, balance, level, xp, description, t_lvl, m_lvl = clan_data
+        
+        max_members = 10 + (m_lvl - 1) * 10
+        max_balance = 25_000_000 + (t_lvl - 1) * 25_000_000
+        xp_needed = 500 + (level - 1) * 250
+        
+        content = (
+            f"🛡️ **Клан:** {clan_name}\n"
+            f"👥 **Участники:** {member_count}/{max_members}\n"
+            f"💰 **Баланс:** {balance:,}$ / {max_balance:,}$\n"
+            f"📈 **Уровень:** {level} ({xp}/{xp_needed} XP)\n"
+            f"🎖️ **Ваш статус:** {user_rank}\n"
+            f"👑 **Владелец:** <@{owner_id}>\n"
+            f"🚫 **Описание:** {description}"
+        )
+        
+        embed = discord.Embed(description=content, color=discord.Color.dark_grey())
+        embed.set_footer(text="Система кланов")
+        
+        await msg.edit(content=None, embed=embed)
 
 @clan.command(name="up")
 async def up(ctx):
