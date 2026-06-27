@@ -2759,6 +2759,11 @@ async def on_ready():
     client.add_view(FactionView())
     print(f"Bot {client.user} is ready!")
     
+    async with aiosqlite.connect("clans.db") as db:
+        await db.execute("CREATE TABLE IF NOT EXISTS clans (name TEXT PRIMARY KEY, level INTEGER, xp INTEGER)")
+        await db.execute("CREATE TABLE IF NOT EXISTS members (user_id INTEGER, clan_name TEXT, rank TEXT)")
+        await db.commit()
+    
     if not payout_loop.is_running():
         payout_loop.start()
         
