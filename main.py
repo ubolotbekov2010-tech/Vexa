@@ -2267,26 +2267,34 @@ async def clan(ctx):
         )
         await ctx.send(embed=embed)
 
-def get_user_balance(user_id):
-    if not os.path.exists("economy.json"): return 0
+def get_user_data(guild_id, user_id):
+    if not os.path.exists("economy.json"): return {"balance": 0, "bank": 0}
     with open("economy.json", "r") as f:
         try:
             data = json.load(f)
-            return data.get(str(user_id), {}).get("balance", 0)
-        except: return 0
+            return data.get(str(guild_id), {}).get(str(user_id), {"balance": 0, "bank": 0})
+        except: return {"balance": 0, "bank": 0}
 
-def update_user_balance(user_id, amount):
+def save_user_data(guild_id, user_id, user_data):
     if not os.path.exists("economy.json"): return
     with open("economy.json", "r") as f:
         data = json.load(f)
     
-    if str(user_id) not in data:
-        data[str(user_id)] = {"balance": 0}
-        
-    data[str(user_id)]["balance"] += amount
+    if str(guild_id) not in data: data[str(guild_id)] = {}
+    data[str(guild_id)][str(user_id)] = user_data
     
     with open("economy.json", "w") as f:
         json.dump(data, f, indent=4)
+
+def update_user_balance(guild_id, user_id, amount):
+    user_data = get_user_data(guild_id, user_id)
+    user_data["balance"] += amount
+    save_user_data(guild_id, user_id, user_data)
+
+def update_user_bank(guild_id, user_id, amount):
+    user_data = get_user_data(guild_id, user_id)
+    user_data["bank"] += amount
+    save_user_data(guild_id, user_id, user_data)
 
 @clan.command(name="create")
 async def create(ctx, *, name: str):
@@ -2296,7 +2304,9 @@ async def create(ctx, *, name: str):
         if await cursor.fetchone():
             return await ctx.send("❌ **Ошибка:** Вы уже состоите в клане. Сначала покиньте старый.")
 
-        current_bal = get_user_balance(ctx.author.id) 
+        user_data = get_user_data(ctx.guild.id, ctx.author.id)
+        current_bal = user_data["balance"] + user_data["bank"]
+        
         if current_bal < CREATE_COST:
             return await ctx.send(f"❌ **Недостаточно средств!**\nДля создания клана нужно **{CREATE_COST:,}** валюты.\nВаш баланс: **{current_bal:,}**.")
 
@@ -2316,8 +2326,14 @@ async def create(ctx, *, name: str):
             
         except discord.Forbidden:
             return await ctx.send("❌ **Ошибка:** У бота нет прав для создания ролей.")
-
-        update_user_balance(ctx.author.id, -CREATE_COST)
+        
+        if user_data["balance"] >= CREATE_COST:
+            user_data["balance"] -= CREATE_COST
+        else:
+            remaining = CREATE_COST - user_data["balance"]
+            user_data["balance"] = 0
+            user_data["bank"] -= remaining
+        save_user_data(ctx.guild.id, ctx.author.id, user_data)
 
         await db.execute(
             "INSERT INTO clans (name, owner_id, balance, level, description, role_id) VALUES (?, ?, ?, ?, ?, ?)",
@@ -2329,16 +2345,16 @@ async def create(ctx, *, name: str):
         )
         await db.commit()
 
-    embed = discord.Embed(
-        title="🏆 Клан успешно создан!",
-        description=f"Поздравляю, **{ctx.author.mention}**!\n\n"
-                    f"Клан **{name}** основан.\n"
-                    f"Списано: **{CREATE_COST:,}** валюты.\n\n"
-                    f"Вам выданы роли: **{name}** и **Глава клана**.",
-        color=discord.Color.gold()
-    )
-    embed.set_thumbnail(url=ctx.author.display_avatar.url)
-    embed.set_footer(text="Используйте !clan invite для приглашения участников!")
+        embed = discord.Embed(
+            title="🏆 Клан успешно создан!",
+            description=f"Поздравляю, **{ctx.author.mention}**!\n\n"
+                        f"Клан **{name}** основан.\n"
+                        f"Списано: **{CREATE_COST:,}** валюты.\n\n"
+                        f"Вам выданы роли: **{name}** и **Глава клана**.",
+            color=discord.Color.gold()
+        )
+        embed.set_thumbnail(url=ctx.author.display_avatar.url)
+        embed.set_footer(text="Используйте !clan invite для приглашения участников!")
     
     await ctx.send(embed=embed)
 
@@ -2484,14 +2500,16 @@ async def deposit(ctx, amount: int):
         if current_balance + amount > max_limit:
             return await ctx.send(f"❌ **Лимит превышен!**\nВаш текущий лимит казны: **{max_limit:,}$**.\nПрокачайте уровень казны, чтобы хранить больше!")
 
-        user_bal = get_user_balance(ctx.author.id)
-        if user_bal < amount:
+        user_data = get_user_data(ctx.guild.id, ctx.author.id)
+        if user_data["balance"] < amount:
             return await ctx.send("❌ У вас недостаточно денег на руках.")
 
         await db.execute("UPDATE clans SET balance = balance + ? WHERE name = ?", (amount, clan_name))
         await db.commit()
+    
+    user_data["balance"] -= amount
+    save_user_data(ctx.guild.id, ctx.author.id, user_data)
         
-    update_user_balance(ctx.author.id, -amount)
     await ctx.send(f"💰 В казну клана **{clan_name}** внесено **{amount:,}$**.")
 
 @clan.command(name="withdraw")
